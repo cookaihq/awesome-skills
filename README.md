@@ -50,4 +50,4 @@ npx skills add cookaihq/awesome-skills --skill image-2 -a claude-code
 
 ## License
 
-待定（推荐 MIT）。
+[MIT](LICENSE)

@@ -198,7 +198,7 @@ image-2/
 
 ## License
 
-待定 — 推荐 `MIT`。
+MIT，见仓库根 [LICENSE](../LICENSE)。
 
 ## Acknowledgements
 
