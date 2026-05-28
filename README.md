@@ -10,7 +10,7 @@ cookaihq 维护的 Agent Skill 集合 —— 每个 skill 是一份遵循 [agent
 
 ## 安装
 
-以 `image-2` 为例，三种方式任选其一。
+以 `image-2` 为例，四种方式任选其一。
 
 项目级 symlink（只在当前项目生效）：
 
@@ -33,6 +33,16 @@ npx skills add cookaihq/awesome-skills --skill image-2 -a claude-code
 ```
 
 > Codex / Gemini 用户把 `-a claude-code` 换成对应平台标识。
+
+让 Agent 自己装（把下面这段提示词丢给 Claude Code 或 Codex）：
+
+```text
+请把 https://github.com/cookaihq/awesome-skills 仓库里的 image-2 skill 安装给你自己用：
+1. 克隆仓库到本地（已克隆则更新）
+2. 把其中的 image-2 目录链接或复制到你当前平台的 skills 目录
+   （Claude Code 用 ~/.claude/skills/image-2，其他平台用各自约定的位置）
+3. 读 image-2/SKILL.md 确认能被识别，然后告诉我怎么触发它
+```
 
 各 skill 的详细用法、配置与排错见其目录下的 README。
 
