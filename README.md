@@ -22,6 +22,8 @@ cookaihq 维护的 Agent Skill 集合 —— 每个 skill 是一份遵循 [agent
 3. 读 image-2/SKILL.md 确认能被识别，然后告诉我怎么触发它
 ```
 
+如果你非常清楚 Skills 的安装方式，可以使用以下方法。
+
 项目级 symlink（只在当前项目生效）：
 
 ```bash
