@@ -7,10 +7,11 @@ cookaihq 维护的 Agent Skill 集合 —— 每个 skill 是一份遵循 [agent
 | Skill | 功能 | 文档 |
 |---|---|---|
 | [image-2](image-2/) | 通过 foxapi.cc 的 `gpt-image-2` 接口生成图片：文生图 / 图生图、11 种预设比例 + 自定义分辨率（最高 4K）、任务完成自动下载到工作区 | [README](image-2/README.md) · [SKILL.md](image-2/SKILL.md) |
+| [banana-2](banana-2/) | 通过 foxapi.cc 的 Nano Banana 2（`gemini-3.1-flash-image-preview`）接口生成/编辑图片：文生图 / 图生图 / 图像编辑、15 种宽高比 + `512`~`4K` 画质档、可选 `google_search` / `image_search`、任务完成自动下载到工作区 | [README](banana-2/README.md) · [SKILL.md](banana-2/SKILL.md) |
 
 ## 安装
 
-以 `image-2` 为例，四种方式任选其一。
+以 `image-2` 为例，四种方式任选其一（其他 skill 如 `banana-2` 把命令里的 `image-2` 换成对应目录名即可）。
 
 让 Agent 自己装（推荐，最省事 —— 把下面这段提示词丢给 Claude Code 或 Codex）：
 
