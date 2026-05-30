@@ -183,7 +183,7 @@ def test_render_html_replaces_tokens_and_injects_cards():
     assert 'src="assets/note-01.jpg"' in out           # 卡封面相对 <img>
     assert "<!--CARDS-->" not in out                   # 占位被卡片替换
     assert "2万" in out                                 # 获赞数格式化
-    assert "1234" in out or "1.2" not in out           # 卡 likes 渲染（<10000 原样）
+    assert "1234" in out                                # 卡 likes 渲染（<10000 原样）
 
 
 def test_render_html_all_images_relative():
@@ -195,3 +195,12 @@ def test_render_html_all_images_relative():
     out = gen.render_html(template, persona, cards)
     srcs = re.findall(r'src="([^"]+)"', out)
     assert srcs and all(s.startswith("assets/") for s in srcs)   # 全相对，preview-share 可扫描
+
+
+def test_render_html_no_second_pass_token_substitution():
+    template = "<h1>{{NICKNAME}}</h1><span>{{LIKES}}</span><!--CARDS-->"
+    persona = {"nickname": "{{LIKES}}", "bio": "", "red_id": "", "following": "0",
+               "followers": "0", "likes": "20000", "avatar_rel": "assets/avatar.svg"}
+    out = gen.render_html(template, persona, [])
+    assert "{{LIKES}}" in out          # nickname 的字面 {{LIKES}} 不被替换
+    assert out.count("2万") == 1        # 只有真正的 {{LIKES}} token 被格式化

@@ -202,19 +202,21 @@ def render_card_html(card):
     )
 
 
+_TOKEN_RE = re.compile(r"\{\{(NICKNAME|BIO|RED_ID|FOLLOWING|FOLLOWERS|LIKES|AVATAR)\}\}")
+
+
 def render_html(template_str, persona, cards):
     cards_html = "\n".join(render_card_html(c) for c in cards)
-    text_tokens = {
-        "{{NICKNAME}}": html.escape(persona["nickname"]),
-        "{{BIO}}": html.escape(persona["bio"]),
-        "{{RED_ID}}": html.escape(persona["red_id"]),
-        "{{FOLLOWING}}": format_count(persona["following"]),
-        "{{FOLLOWERS}}": format_count(persona["followers"]),
-        "{{LIKES}}": format_count(persona["likes"]),
+    values = {
+        "NICKNAME": html.escape(persona["nickname"]),
+        "BIO": html.escape(persona["bio"]),
+        "RED_ID": html.escape(persona["red_id"]),
+        "FOLLOWING": format_count(persona["following"]),
+        "FOLLOWERS": format_count(persona["followers"]),
+        "LIKES": format_count(persona["likes"]),
+        "AVATAR": persona["avatar_rel"],  # 相对路径，不转义
     }
-    out = template_str
-    for k, v in text_tokens.items():
-        out = out.replace(k, v)
-    out = out.replace("{{AVATAR}}", persona["avatar_rel"])   # 路径不转义
+    # 单遍替换：插入的值不会被再次扫描成 token（避免二次替换）
+    out = _TOKEN_RE.sub(lambda m: values[m.group(1)], template_str)
     out = out.replace("<!--CARDS-->", cards_html)
     return out
