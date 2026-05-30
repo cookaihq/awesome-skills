@@ -1,4 +1,5 @@
 import os, sys, importlib.util
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GEN = os.path.join(HERE, "..", "scripts", "generate.py")
@@ -152,3 +153,45 @@ def test_plan_render_fills_to_min_and_uses_persona_author(tmp_path):
     srcs = dict((d, s) for s, d in copies)
     assert srcs["note-01.jpg"] == "/abs/c1.jpg"
     assert srcs["note-02.png"] == os.path.join("/pwd", "rel/c2.png")
+
+
+def test_format_count():
+    assert gen.format_count("0") == "0"
+    assert gen.format_count(999) == "999"
+    assert gen.format_count(12345) == "1.2万"
+    assert gen.format_count("20000") == "2万"
+
+
+def test_render_html_replaces_tokens_and_injects_cards():
+    template = (
+        "<h1>{{NICKNAME}}</h1><p>{{BIO}}</p><i>{{RED_ID}}</i>"
+        "<span>{{FOLLOWING}}/{{FOLLOWERS}}/{{LIKES}}</span>"
+        '<img id="me" src="{{AVATAR}}">'
+        '<section class="grid"><!--CARDS--></section>'
+    )
+    persona = {"nickname": "阿<喵>", "bio": "bio", "red_id": "xhs_1",
+               "following": "88", "followers": "1024", "likes": "20000",
+               "avatar_rel": "assets/avatar.svg"}
+    cards = [{"cover": "assets/note-01.jpg", "title": "标题&", "likes": 1234,
+              "author": "阿<喵>", "avatar": "assets/avatar.svg"}]
+    out = gen.render_html(template, persona, cards)
+
+    assert "阿&lt;喵&gt;" in out                       # 昵称被 HTML 转义
+    assert "标题&amp;" in out                           # 卡标题被转义
+    assert 'src="{{AVATAR}}"' not in out               # 头像 token 被替换
+    assert 'src="assets/avatar.svg"' in out            # 替成相对路径（未被转义破坏）
+    assert 'src="assets/note-01.jpg"' in out           # 卡封面相对 <img>
+    assert "<!--CARDS-->" not in out                   # 占位被卡片替换
+    assert "2万" in out                                 # 获赞数格式化
+    assert "1234" in out or "1.2" not in out           # 卡 likes 渲染（<10000 原样）
+
+
+def test_render_html_all_images_relative():
+    template = '<img src="{{AVATAR}}"><div><!--CARDS--></div>'
+    persona = {"nickname": "n", "bio": "", "red_id": "", "following": "0",
+               "followers": "0", "likes": "0", "avatar_rel": "assets/avatar.svg"}
+    cards = [{"cover": "assets/note-01.jpg", "title": "t", "likes": 1,
+              "author": "n", "avatar": "assets/avatar.svg"}]
+    out = gen.render_html(template, persona, cards)
+    srcs = re.findall(r'src="([^"]+)"', out)
+    assert srcs and all(s.startswith("assets/") for s in srcs)   # 全相对，preview-share 可扫描

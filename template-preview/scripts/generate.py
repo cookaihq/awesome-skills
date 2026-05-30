@@ -174,3 +174,47 @@ def plan_render(content, persona, fillers, pwd, min_cards):
                       "author": persona["nickname"], "avatar": avatar_rel})
 
     return cards, copies
+
+
+def format_count(n):
+    """小红书风格计数：>=10000 显示「x.x万」（去掉 .0），否则原样。"""
+    try:
+        v = int(str(n).strip())
+    except (ValueError, TypeError):
+        return html.escape(str(n))
+    if v < 10000:
+        return str(v)
+    s = f"{v / 10000:.1f}".rstrip("0").rstrip(".")
+    return f"{s}万"
+
+
+def render_card_html(card):
+    return (
+        '<div class="card">'
+        f'<img class="cover" src="{card["cover"]}" alt="" loading="lazy">'
+        '<div class="card-body">'
+        f'<div class="card-title">{html.escape(card["title"])}</div>'
+        '<div class="card-foot">'
+        f'<span class="author"><img class="avatar-sm" src="{card["avatar"]}" alt="">'
+        f'<span class="author-name">{html.escape(card["author"])}</span></span>'
+        f'<span class="likes">♥ {format_count(card["likes"])}</span>'
+        '</div></div></div>'
+    )
+
+
+def render_html(template_str, persona, cards):
+    cards_html = "\n".join(render_card_html(c) for c in cards)
+    text_tokens = {
+        "{{NICKNAME}}": html.escape(persona["nickname"]),
+        "{{BIO}}": html.escape(persona["bio"]),
+        "{{RED_ID}}": html.escape(persona["red_id"]),
+        "{{FOLLOWING}}": format_count(persona["following"]),
+        "{{FOLLOWERS}}": format_count(persona["followers"]),
+        "{{LIKES}}": format_count(persona["likes"]),
+    }
+    out = template_str
+    for k, v in text_tokens.items():
+        out = out.replace(k, v)
+    out = out.replace("{{AVATAR}}", persona["avatar_rel"])   # 路径不转义
+    out = out.replace("<!--CARDS-->", cards_html)
+    return out
