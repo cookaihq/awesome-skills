@@ -96,3 +96,55 @@ def test_load_content(tmp_path):
     c = gen.load_content(str(p))
     assert c["label"] == "iot"
     assert c["notes"][0]["title"] == "t"
+
+
+import json
+
+
+def _make_fillers(tmp_path, n=3):
+    d = tmp_path / "fillers"
+    d.mkdir()
+    items = []
+    for i in range(1, n + 1):
+        (d / f"filler-{i:02d}.svg").write_text("<svg/>", encoding="utf-8")
+        items.append({"file": f"filler-{i:02d}.svg", "title": f"标题{i}", "likes": 100 + i})
+    (d / "titles.json").write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    return str(d)
+
+
+def test_load_fillers(tmp_path):
+    d = _make_fillers(tmp_path, 2)
+    fillers = gen.load_fillers(d)
+    assert len(fillers) == 2
+    assert fillers[0]["title"] == "标题1"
+    assert fillers[0]["likes"] == 101
+    assert fillers[0]["cover_path"].endswith("filler-01.svg")
+
+
+def test_plan_render_fills_to_min_and_uses_persona_author(tmp_path):
+    filler_dir = _make_fillers(tmp_path, 4)
+    fillers = gen.load_fillers(filler_dir)
+    persona = {"nickname": "阿喵", "avatar_path": "/tpl/avatar-default.svg",
+               "avatar_rel": "assets/avatar.svg"}
+    content = {"notes": [{"cover": "/abs/c1.jpg", "title": "用户卡A", "likes": 9},
+                         {"cover": "rel/c2.png", "title": "用户卡B"}]}  # B 无 likes
+    cards, copies = gen.plan_render(content, persona, fillers, pwd="/pwd", min_cards=5)
+
+    assert len(cards) == 5                                   # 2 用户 + 3 填充 = 5
+    assert [c["title"] for c in cards[:2]] == ["用户卡A", "用户卡B"]
+    assert cards[0]["cover"] == "assets/note-01.jpg"
+    assert cards[1]["cover"] == "assets/note-02.png"
+    assert cards[1]["likes"] == gen.placeholder_likes("用户卡B")   # 缺省占位
+    assert cards[2]["cover"].startswith("assets/filler-")
+    # 所有卡作者头像/昵称都用人设
+    assert all(c["author"] == "阿喵" for c in cards)
+    assert all(c["avatar"] == "assets/avatar.svg" for c in cards)
+    # 拷贝清单：头像 + 2 用户封面 + 3 填充封面 = 6
+    dests = [d for _, d in copies]
+    assert "avatar.svg" in dests
+    assert "note-01.jpg" in dests and "note-02.png" in dests
+    assert sum(1 for d in dests if d.startswith("filler-")) == 3
+    # 用户卡相对路径正确解析（rel 以 pwd 为基准）
+    srcs = dict((d, s) for s, d in copies)
+    assert srcs["note-01.jpg"] == "/abs/c1.jpg"
+    assert srcs["note-02.png"] == os.path.join("/pwd", "rel/c2.png")

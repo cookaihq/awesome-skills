@@ -114,3 +114,63 @@ def resolve_cover(cover, pwd):
 def load_content(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_fillers(filler_dir):
+    """读填充卡目录：图片文件 + 同目录 titles.json（[{file,title,likes}]）。"""
+    meta = {}
+    titles_path = os.path.join(filler_dir, "titles.json")
+    if os.path.isfile(titles_path):
+        with open(titles_path, encoding="utf-8") as f:
+            for item in json.load(f):
+                meta[item.get("file")] = item
+    fillers = []
+    if not os.path.isdir(filler_dir):
+        return fillers
+    for fn in sorted(os.listdir(filler_dir)):
+        if fn == "titles.json":
+            continue
+        if os.path.splitext(fn)[1].lower() not in IMG_EXT:
+            continue
+        m = meta.get(fn, {})
+        fillers.append({
+            "cover_path": os.path.join(filler_dir, fn),
+            "title": m.get("title", ""),
+            "likes": m.get("likes"),
+        })
+    return fillers
+
+
+def plan_render(content, persona, fillers, pwd, min_cards):
+    """装配 (cards, copies)。
+    cards: 模板用，含相对 cover/avatar、title、likes、author。
+    copies: [(src_abs, dest_basename_under_assets)]，含头像。
+    所有卡（含填充卡）作者头像/昵称统一用人设。"""
+    avatar_rel = persona["avatar_rel"]
+    copies = [(persona["avatar_path"], os.path.basename(avatar_rel))]
+    cards = []
+
+    for i, n in enumerate(content.get("notes", []), 1):
+        src = resolve_cover(n["cover"], pwd)
+        dest = f"note-{i:02d}{ext_of(src)}"
+        copies.append((src, dest))
+        likes = n.get("likes")
+        title = n.get("title", "")
+        if likes is None:
+            likes = placeholder_likes(title)
+        cards.append({"cover": f"assets/{dest}", "title": title, "likes": likes,
+                      "author": persona["nickname"], "avatar": avatar_rel})
+
+    for j, f in enumerate(fillers, 1):
+        if len(cards) >= min_cards:
+            break
+        src = f["cover_path"]
+        dest = f"filler-{j:02d}{ext_of(src, '.svg')}"
+        copies.append((src, dest))
+        likes = f.get("likes")
+        if likes is None:
+            likes = placeholder_likes(f.get("title", ""))
+        cards.append({"cover": f"assets/{dest}", "title": f.get("title", ""), "likes": likes,
+                      "author": persona["nickname"], "avatar": avatar_rel})
+
+    return cards, copies
