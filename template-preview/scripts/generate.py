@@ -78,7 +78,7 @@ def resolve_config(varnames, builtin_defaults):
 
 
 def slugify_label(label):
-    s = re.sub(r"[^A-Za-z0-9._一-鿿-]+", "-", (label or "").strip()).strip("-")
+    s = re.sub(r"[^-A-Za-z0-9._一-鿿]+", "-", (label or "").strip()).strip("-")
     return s or "preview"
 
 
