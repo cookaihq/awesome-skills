@@ -286,3 +286,26 @@ def test_main_bad_min_cards_returns_2(tmp_path, monkeypatch):
     rc = _run(["--template", "xiaohongshu", "--content", str(content),
                "--out", str(tmp_path / "o")], cwd=str(tmp_path))
     assert rc == 2
+
+
+def test_output_is_scannable_by_preview_share(tmp_path):
+    # 加载 preview-share 的真实依赖扫描器
+    ps = os.path.join(HERE, "..", "..", "preview-share", "scripts", "upload.py")
+    pspec = importlib.util.spec_from_file_location("ps_upload", ps)
+    psmod = importlib.util.module_from_spec(pspec)
+    pspec.loader.exec_module(psmod)
+
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": [{"cover": cover, "title": "n"}]}), encoding="utf-8")
+    out = tmp_path / "out"
+    _run(["--template", "xiaohongshu", "--content", str(content),
+          "--label", "x", "--out", str(out)], cwd=str(tmp_path))
+
+    collected, missing = psmod.scan_deps(str(out / "index.html"))
+    # 入口的所有相对引用都能在本地找到（线上不裂图）
+    assert missing == []
+    names = {os.path.basename(p) for p in collected}
+    assert "note-01.jpg" in names                     # 用户封面被扫到
+    assert any(n.startswith("filler-") for n in names)  # 填充卡被扫到
+    assert any(n == "avatar.svg" for n in names)        # 头像被扫到
