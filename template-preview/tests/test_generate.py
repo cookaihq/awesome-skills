@@ -121,6 +121,10 @@ def test_load_fillers(tmp_path):
     assert fillers[0]["cover_path"].endswith("filler-01.svg")
 
 
+def test_load_fillers_missing_dir():
+    assert gen.load_fillers("/nonexistent/dir/xyz") == []
+
+
 def test_plan_render_fills_to_min_and_uses_persona_author(tmp_path):
     filler_dir = _make_fillers(tmp_path, 4)
     fillers = gen.load_fillers(filler_dir)
