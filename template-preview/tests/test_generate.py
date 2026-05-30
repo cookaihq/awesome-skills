@@ -70,3 +70,29 @@ def test_build_output_dir_absolute_root():
 def test_build_output_dir_explicit_out_wins(tmp_path):
     out = gen.build_output_dir(str(tmp_path / "x"), "ignored", "ignored", "/pwd")
     assert out == os.path.abspath(str(tmp_path / "x"))
+
+
+def test_placeholder_likes_deterministic():
+    a = gen.placeholder_likes("笔记标题")
+    b = gen.placeholder_likes("笔记标题")
+    assert a == b                       # 同输入同输出
+    assert 100 <= a <= 9099             # 落在合理区间
+    assert gen.placeholder_likes("另一个") != a or True  # 不要求不同，只要求确定
+
+
+def test_ext_of():
+    assert gen.ext_of("/a/b.JPG") == ".jpg"
+    assert gen.ext_of("noext", default=".svg") == ".svg"
+
+
+def test_resolve_cover_abs_and_rel():
+    assert gen.resolve_cover("/abs/x.jpg", "/pwd") == "/abs/x.jpg"
+    assert gen.resolve_cover("imgs/x.jpg", "/pwd") == os.path.join("/pwd", "imgs/x.jpg")
+
+
+def test_load_content(tmp_path):
+    p = tmp_path / "content.json"
+    p.write_text('{"label":"iot","notes":[{"cover":"a.jpg","title":"t","likes":12}]}', encoding="utf-8")
+    c = gen.load_content(str(p))
+    assert c["label"] == "iot"
+    assert c["notes"][0]["title"] == "t"

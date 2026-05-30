@@ -95,3 +95,22 @@ def build_output_dir(out_arg, output_root, subdir, pwd):
         return os.path.abspath(out_arg)
     root = output_root if os.path.isabs(output_root) else os.path.join(pwd, output_root)
     return os.path.join(root, subdir)
+
+
+def ext_of(path, default=".jpg"):
+    e = os.path.splitext(path)[1].lower()
+    return e if e else default
+
+
+def placeholder_likes(seed):
+    """确定性占位点赞数：同输入同输出，落在 100..9099。"""
+    return sum(ord(c) for c in str(seed)) % 9000 + 100
+
+
+def resolve_cover(cover, pwd):
+    return cover if os.path.isabs(cover) else os.path.join(pwd, cover)
+
+
+def load_content(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
