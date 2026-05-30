@@ -35,6 +35,10 @@
   .grid { column-count:2; column-gap:8px; padding:8px; }
   .card { break-inside:avoid; background:var(--card); border-radius:10px; overflow:hidden;
           margin-bottom:8px; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+  /* 真实笔记卡是可点击链接：去掉下划线、继承文字色、整块可点 */
+  a.card-link { display:block; text-decoration:none; color:inherit;
+                -webkit-tap-highlight-color:transparent; }
+  a.card-link:active { opacity:.85; }
   .card .cover { width:100%; display:block; }
   .card-body { padding:8px 10px 10px; }
   .card-title { font-size:13px; line-height:1.4; color:#222;

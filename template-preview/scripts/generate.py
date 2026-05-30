@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """template-preview: 把一组图片+文案渲染成「指定模板风格」的自包含展示页。
 
+v2：输出个人主页 index.html + 每条笔记一个 note-NN.html（详情页，横向轮播）。
+主页卡片链接到对应详情页；填充卡不可点、不生成详情页。
+
 配置读取优先级（见仓库 CLAUDE.md 通用约定，本 skill 去掉 ~/.config 层）：
   1. 进程环境变量（本轮显式注入或已 export）
   2. $PWD/.env.local（自动读，不向上递归）
   3. $PWD/.env（自动读，不向上递归）
   4. 内置默认（模板级在 templates/<t>/defaults.env 与内置素材；skill 级写在本文件）
 每个变量独立按此顺序取「首个非空来源」。
-stdout 仅输出最终 index.html 路径；其余信息走 stderr。
+stdout 输出所有生成页面的绝对路径（每行一个，第一行为 index.html）；其余信息走 stderr。
 """
 import argparse
 import datetime
@@ -22,8 +25,8 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 TEMPLATES_DIR = os.path.join(os.path.dirname(HERE), "templates")
 
 SKILL_DEFAULTS = {
-    "TPL_OUTPUT_ROOT": "template-preview",
-    "TPL_SUBDIR_PATTERN": "{date}-{time}-{label}",
+    "TPL_OUTPUT_ROOT": "",  # 空 = 直接放在项目根 $PWD 下；填相对/绝对路径可换根
+    "TPL_SUBDIR_PATTERN": "{date}-{time}-{label}",  # 仅 --name 未给时用于自动命名
 }
 
 # 各模板的人设变量前缀
@@ -32,6 +35,10 @@ TEMPLATE_VAR_PREFIX = {
 }
 
 IMG_EXT = {".svg", ".jpg", ".jpeg", ".png", ".webp", ".gif"}
+
+# 标题/正文取不到时的固定回落文案（真实笔记用；填充卡不受影响）
+DEFAULT_TITLE = "暂无标题"
+DEFAULT_BODY = "暂无正文"
 
 
 def log(msg):
@@ -107,13 +114,25 @@ def placeholder_likes(seed):
     return sum(ord(c) for c in str(seed)) % 9000 + 100
 
 
-def resolve_cover(cover, pwd):
-    return cover if os.path.isabs(cover) else os.path.join(pwd, cover)
+def resolve_path(p, pwd):
+    return p if os.path.isabs(p) else os.path.join(pwd, p)
 
 
 def load_content(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def note_image_srcs(note, pwd):
+    """该 note 的图片绝对路径列表：images 优先（按顺序），回落到 [cover]。"""
+    imgs = note.get("images")
+    if isinstance(imgs, list) and imgs:
+        srcs = imgs
+    elif note.get("cover"):
+        srcs = [note["cover"]]
+    else:
+        srcs = []
+    return [resolve_path(s, pwd) for s in srcs]
 
 
 def load_fillers(filler_dir):
@@ -142,27 +161,43 @@ def load_fillers(filler_dir):
 
 
 def plan_render(content, persona, fillers, pwd, min_cards):
-    """装配 (cards, copies)。
-    cards: 模板用，含相对 cover/avatar、title、likes、author。
-    copies: [(src_abs, dest_basename_under_assets)]，含头像。
-    所有卡（含填充卡）作者头像/昵称统一用人设。"""
+    """装配 (home_cards, note_pages, copies)。
+
+    home_cards: 主页卡片。真实卡含 href→详情页；填充卡无 href（不可点）。
+    note_pages: 每条笔记一个详情页 {filename, title, body, likes, slides:[相对图]}。
+    copies: [(src_abs, dest_basename_under_assets)]，含头像 + 各笔记图 + 填充图。
+    所有卡作者头像/昵称统一用人设。"""
     avatar_rel = persona["avatar_rel"]
     copies = [(persona["avatar_path"], os.path.basename(avatar_rel))]
-    cards = []
+    home_cards = []
+    note_pages = []
 
     for i, n in enumerate(content.get("notes", []), 1):
-        src = resolve_cover(n["cover"], pwd)
-        dest = f"note-{i:02d}{ext_of(src)}"
-        copies.append((src, dest))
+        srcs = note_image_srcs(n, pwd)
+        title = (n.get("title") or "").strip() or DEFAULT_TITLE   # 取不到→固定回落
+        body = (n.get("body") or "").strip() or DEFAULT_BODY      # 取不到→固定回落
         likes = n.get("likes")
-        title = n.get("title", "")
         if likes is None:
             likes = placeholder_likes(title)
-        cards.append({"cover": f"assets/{dest}", "title": title, "likes": likes,
-                      "author": persona["nickname"], "avatar": avatar_rel})
+        slides = []
+        for m, src in enumerate(srcs, 1):
+            dest = f"note-{i:02d}-img-{m:02d}{ext_of(src)}"
+            copies.append((src, dest))
+            slides.append(f"assets/{dest}")
+        page_file = f"note-{i:02d}.html"
+        home_cards.append({                       # 主页真实卡：封面=首图，点击进详情页
+            "cover": slides[0] if slides else "",
+            "title": title, "likes": likes,
+            "author": persona["nickname"], "avatar": avatar_rel,
+            "href": page_file,
+        })
+        note_pages.append({
+            "filename": page_file, "title": title, "body": body,
+            "likes": likes, "slides": slides,
+        })
 
-    for j, f in enumerate(fillers, 1):
-        if len(cards) >= min_cards:
+    for j, f in enumerate(fillers, 1):            # 填充卡补足网格：无 href、不出详情页
+        if len(home_cards) >= min_cards:
             break
         src = f["cover_path"]
         dest = f"filler-{j:02d}{ext_of(src, '.svg')}"
@@ -170,10 +205,12 @@ def plan_render(content, persona, fillers, pwd, min_cards):
         likes = f.get("likes")
         if likes is None:
             likes = placeholder_likes(f.get("title", ""))
-        cards.append({"cover": f"assets/{dest}", "title": f.get("title", ""), "likes": likes,
-                      "author": persona["nickname"], "avatar": avatar_rel})
+        home_cards.append({
+            "cover": f"assets/{dest}", "title": f.get("title", ""), "likes": likes,
+            "author": persona["nickname"], "avatar": avatar_rel,
+        })
 
-    return cards, copies
+    return home_cards, note_pages, copies
 
 
 def format_count(n):
@@ -189,8 +226,7 @@ def format_count(n):
 
 
 def render_card_html(card):
-    return (
-        '<div class="card">'
+    inner = (
         f'<img class="cover" src="{card["cover"]}" alt="" loading="lazy">'
         '<div class="card-body">'
         f'<div class="card-title">{html.escape(card["title"])}</div>'
@@ -198,16 +234,50 @@ def render_card_html(card):
         f'<span class="author"><img class="avatar-sm" src="{card["avatar"]}" alt="">'
         f'<span class="author-name">{html.escape(card["author"])}</span></span>'
         f'<span class="likes">♥ {format_count(card["likes"])}</span>'
-        '</div></div></div>'
+        '</div></div>'
+    )
+    href = card.get("href")
+    if href:  # 真实卡 → 整块可点链接到详情页
+        return f'<a class="card-link" href="{html.escape(href)}"><div class="card">{inner}</div></a>'
+    return f'<div class="card">{inner}</div>'  # 填充卡 → 不可点
+
+
+def render_slides_html(slide_rels):
+    return "\n".join(
+        f'<div class="slide"><img src="{r}" alt="" loading="lazy"></div>' for r in slide_rels
     )
 
 
-_TOKEN_RE = re.compile(r"\{\{(NICKNAME|BIO|RED_ID|FOLLOWING|FOLLOWERS|LIKES|AVATAR)\}\}")
+def render_dots_html(n):
+    if n < 2:  # 单图不显示圆点
+        return ""
+    return "".join(
+        f'<span class="dot{" active" if k == 0 else ""}"></span>' for k in range(n)
+    )
 
 
-def render_html(template_str, persona, cards):
-    cards_html = "\n".join(render_card_html(c) for c in cards)
-    values = {
+def render_body_html(body):
+    """正文：HTML 转义 + 空行切段（\\n\\n→<p>，段内 \\n→<br>）；空则整块不渲染。"""
+    body = (body or "").strip()
+    if not body:
+        return ""
+    paras = []
+    for chunk in re.split(r"\n\s*\n", body):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        paras.append("<p>" + html.escape(chunk).replace("\n", "<br>") + "</p>")
+    if not paras:
+        return ""
+    return '<div class="body">' + "\n".join(paras) + "</div>"
+
+
+_PERSONA_TOKEN_RE = re.compile(
+    r"\{\{(NICKNAME|BIO|RED_ID|FOLLOWING|FOLLOWERS|LIKES|AVATAR)\}\}")
+
+
+def _persona_values(persona):
+    return {
         "NICKNAME": html.escape(persona["nickname"]),
         "BIO": html.escape(persona["bio"]),
         "RED_ID": html.escape(persona["red_id"]),
@@ -216,9 +286,27 @@ def render_html(template_str, persona, cards):
         "LIKES": format_count(persona["likes"]),
         "AVATAR": persona["avatar_rel"],  # 相对路径，不转义
     }
-    # 单遍替换：插入的值不会被再次扫描成 token（避免二次替换）
-    out = _TOKEN_RE.sub(lambda m: values[m.group(1)], template_str)
-    out = out.replace("<!--CARDS-->", cards_html)
+
+
+def _sub_persona(template_str, persona):
+    """单遍替换人设 token（插入值不会被再次扫描成 token）。"""
+    values = _persona_values(persona)
+    return _PERSONA_TOKEN_RE.sub(lambda m: values[m.group(1)], template_str)
+
+
+def render_home_html(template_str, persona, home_cards):
+    out = _sub_persona(template_str, persona)
+    cards_html = "\n".join(render_card_html(c) for c in home_cards)
+    return out.replace("<!--CARDS-->", cards_html)
+
+
+def render_note_html(template_str, persona, page):
+    out = _sub_persona(template_str, persona)
+    out = out.replace("<!--SLIDES-->", render_slides_html(page["slides"]))
+    out = out.replace("<!--DOTS-->", render_dots_html(len(page["slides"])))
+    out = out.replace("<!--BODY-->", render_body_html(page["body"]))
+    out = out.replace("{{LIKES_NOTE}}", format_count(page["likes"]))
+    out = out.replace("{{TITLE}}", html.escape(page["title"]))
     return out
 
 
@@ -244,8 +332,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="把图片+文案渲染成指定模板风格的自包含展示页")
     ap.add_argument("--template", required=True, help="模板名（v1 仅 xiaohongshu）")
     ap.add_argument("--content", required=True, help="content.json 路径")
-    ap.add_argument("--label", default="", help="子目录标签，参与 TPL_SUBDIR_PATTERN")
-    ap.add_argument("--out", help="直接指定输出目录（最高优先级，覆盖 root/pattern）")
+    ap.add_argument("--label", default="", help="子目录标签，--name 未给时参与 TPL_SUBDIR_PATTERN 自动命名")
+    ap.add_argument("--name", default="", help="输出文件夹名（leaf）；给定则用它命名，跳过 date-time 自动命名")
+    ap.add_argument("--out-root", dest="out_root", default="",
+                    help="输出父目录（相对则相对 $PWD）；优先级高于 TPL_OUTPUT_ROOT，默认 $PWD")
+    ap.add_argument("--out", help="直接指定完整输出目录（最高优先级，覆盖 root/name/pattern）")
     ap.add_argument("--dry-run", action="store_true", help="只打印计划，不写盘")
     args = ap.parse_args(argv)
 
@@ -290,41 +381,55 @@ def main(argv=None):
         log("[error] content.json 的 notes 必须是数组")
         return 2
     for i, n in enumerate(notes, 1):
-        if not isinstance(n, dict) or not n.get("cover"):
-            log(f"[error] notes[{i}] 缺少 cover 字段")
+        if not isinstance(n, dict):
+            log(f"[error] notes[{i}] 必须是对象")
+            return 2
+        imgs = n.get("images")
+        if not (isinstance(imgs, list) and imgs) and not n.get("cover"):
+            log(f"[error] notes[{i}] 需要 images（非空数组）或 cover 字段")
             return 2
     fillers = load_fillers(filler_dir)
-    cards, copies = plan_render(content, persona, fillers, pwd, min_cards)
+    home_cards, note_pages, copies = plan_render(content, persona, fillers, pwd, min_cards)
 
     label = args.label or content.get("label", "")
-    try:
-        subdir = render_subdir(skill_cfg["TPL_SUBDIR_PATTERN"], label, now)
-    except KeyError as e:
-        log(f"[error] TPL_SUBDIR_PATTERN 含未知占位符: {e}；仅支持 {{date}}/{{time}}/{{label}}")
-        return 2
-    out_dir = build_output_dir(args.out, skill_cfg["TPL_OUTPUT_ROOT"], subdir, pwd)
+    if args.name:
+        subdir = slugify_label(args.name)        # 用户指定文件夹名，跳过自动命名
+    else:
+        try:
+            subdir = render_subdir(skill_cfg["TPL_SUBDIR_PATTERN"], label, now)
+        except KeyError as e:
+            log(f"[error] TPL_SUBDIR_PATTERN 含未知占位符: {e}；仅支持 {{date}}/{{time}}/{{label}}")
+            return 2
+    out_root = args.out_root or skill_cfg.get("TPL_OUTPUT_ROOT", "")  # --out-root > env/.env > 默认($PWD)
+    out_dir = build_output_dir(args.out, out_root, subdir, pwd)
     index_path = os.path.join(out_dir, "index.html")
+    page_paths = [index_path] + [os.path.join(out_dir, p["filename"]) for p in note_pages]
 
     log(f"[plan] 模板: {args.template}")
     log(f"[plan] 输出目录: {out_dir}")
-    log(f"[plan] 卡片: {len(cards)}（用户 {len(content.get('notes', []))} + 填充，min={min_cards}）")
+    log(f"[plan] 页面: 1 主页 + {len(note_pages)} 笔记页")
+    log(f"[plan] 主页卡片: {len(home_cards)}（笔记 {len(notes)} + 填充，min={min_cards}）")
+    for p in note_pages:
+        log(f"   {p['filename']}  ({len(p['slides'])} 图)  {p['title']}")
     for src, dest in copies:
         warn = "" if os.path.isfile(src) else "  [warn 源缺失，线上会裂图]"
         log(f"   assets/{dest} <- {src}{warn}")
 
     if args.dry_run:
         log("[dry-run] 未写盘。")
-        print(index_path)
+        for p in page_paths:
+            print(p)
         return 0
 
     if not args.out and os.path.exists(out_dir):
         log(f"[error] 输出目录已存在，拒绝覆盖: {out_dir}")
-        log("  改 --label，或在 TPL_SUBDIR_PATTERN 中保留 {time} 以保证唯一。")
+        log("  换 --name，或（自动命名时）在 TPL_SUBDIR_PATTERN 中保留 {time} 以保证唯一。")
         return 2
 
-    with open(os.path.join(template_dir, "template.html"), encoding="utf-8") as tf:
-        template_str = tf.read()
-    html_out = render_html(template_str, persona, cards)
+    with open(os.path.join(template_dir, "home.html"), encoding="utf-8") as tf:
+        home_tmpl = tf.read()
+    with open(os.path.join(template_dir, "note.html"), encoding="utf-8") as tf:
+        note_tmpl = tf.read()
 
     assets_dir = os.path.join(out_dir, "assets")
     os.makedirs(assets_dir, exist_ok=True)
@@ -333,13 +438,18 @@ def main(argv=None):
             shutil.copy2(src, os.path.join(assets_dir, dest))
         else:
             log(f"[warn] 跳过缺失素材: {src}")
+
     with open(index_path, "w", encoding="utf-8") as f:
-        f.write(html_out)
+        f.write(render_home_html(home_tmpl, persona, home_cards))
+    for p in note_pages:
+        with open(os.path.join(out_dir, p["filename"]), "w", encoding="utf-8") as f:
+            f.write(render_note_html(note_tmpl, persona, p))
     with open(os.path.join(out_dir, "content.json"), "w", encoding="utf-8") as f:
         json.dump(content, f, ensure_ascii=False, indent=2)
 
-    log(f"[done] 输出: {out_dir}")
-    print(index_path)
+    log(f"[done] 输出: {out_dir}（{len(page_paths)} 个页面）")
+    for p in page_paths:
+        print(p)
     return 0
 
 

@@ -3,4 +3,5 @@
 .env
 .env.local
 .env.*.local
+.pytest_cache/
 CLAUDE.md

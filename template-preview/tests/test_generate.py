@@ -73,6 +73,12 @@ def test_build_output_dir_explicit_out_wins(tmp_path):
     assert out == os.path.abspath(str(tmp_path / "x"))
 
 
+def test_build_output_dir_empty_root_is_pwd(tmp_path):
+    # 空 root = 直接放在 $PWD 下（无 template-preview 等中间目录）
+    out = gen.build_output_dir(None, "", "my-page", str(tmp_path))
+    assert out == os.path.join(str(tmp_path), "my-page")
+
+
 def test_placeholder_likes_deterministic():
     a = gen.placeholder_likes("笔记标题")
     b = gen.placeholder_likes("笔记标题")
@@ -86,9 +92,20 @@ def test_ext_of():
     assert gen.ext_of("noext", default=".svg") == ".svg"
 
 
-def test_resolve_cover_abs_and_rel():
-    assert gen.resolve_cover("/abs/x.jpg", "/pwd") == "/abs/x.jpg"
-    assert gen.resolve_cover("imgs/x.jpg", "/pwd") == os.path.join("/pwd", "imgs/x.jpg")
+def test_resolve_path_abs_and_rel():
+    assert gen.resolve_path("/abs/x.jpg", "/pwd") == "/abs/x.jpg"
+    assert gen.resolve_path("imgs/x.jpg", "/pwd") == os.path.join("/pwd", "imgs/x.jpg")
+
+
+def test_note_image_srcs_images_priority():
+    n = {"cover": "c.jpg", "images": ["a.jpg", "b.png"]}
+    assert gen.note_image_srcs(n, "/pwd") == [os.path.join("/pwd", "a.jpg"),
+                                              os.path.join("/pwd", "b.png")]
+
+
+def test_note_image_srcs_falls_back_to_cover():
+    assert gen.note_image_srcs({"cover": "c.jpg"}, "/pwd") == [os.path.join("/pwd", "c.jpg")]
+    assert gen.note_image_srcs({"images": []}, "/pwd") == []  # 空 images 视为无图
 
 
 def test_load_content(tmp_path):
@@ -126,33 +143,88 @@ def test_load_fillers_missing_dir():
     assert gen.load_fillers("/nonexistent/dir/xyz") == []
 
 
-def test_plan_render_fills_to_min_and_uses_persona_author(tmp_path):
+def _persona():
+    return {"nickname": "阿喵", "bio": "b", "red_id": "r", "following": "8",
+            "followers": "9", "likes": "0", "avatar_path": "/tpl/avatar-default.svg",
+            "avatar_rel": "assets/avatar.svg"}
+
+
+def test_plan_render_multi_note_pages_and_assets(tmp_path):
     filler_dir = _make_fillers(tmp_path, 4)
     fillers = gen.load_fillers(filler_dir)
-    persona = {"nickname": "阿喵", "avatar_path": "/tpl/avatar-default.svg",
-               "avatar_rel": "assets/avatar.svg"}
-    content = {"notes": [{"cover": "/abs/c1.jpg", "title": "用户卡A", "likes": 9},
-                         {"cover": "rel/c2.png", "title": "用户卡B"}]}  # B 无 likes
-    cards, copies = gen.plan_render(content, persona, fillers, pwd="/pwd", min_cards=5)
+    persona = _persona()
+    content = {"notes": [
+        {"cover": "/abs/c1.jpg", "title": "用户卡A", "likes": 9,
+         "images": ["/abs/c1.jpg", "rel/c2.png"]},
+        {"cover": "rel/d1.png", "title": "用户卡B"},   # 无 images→回落 cover；无 likes→占位
+    ]}
+    home_cards, note_pages, copies = gen.plan_render(content, persona, fillers, pwd="/pwd", min_cards=5)
 
-    assert len(cards) == 5                                   # 2 用户 + 3 填充 = 5
-    assert [c["title"] for c in cards[:2]] == ["用户卡A", "用户卡B"]
-    assert cards[0]["cover"] == "assets/note-01.jpg"
-    assert cards[1]["cover"] == "assets/note-02.png"
-    assert cards[1]["likes"] == gen.placeholder_likes("用户卡B")   # 缺省占位
-    assert cards[2]["cover"].startswith("assets/filler-")
-    # 所有卡作者头像/昵称都用人设
-    assert all(c["author"] == "阿喵" for c in cards)
-    assert all(c["avatar"] == "assets/avatar.svg" for c in cards)
-    # 拷贝清单：头像 + 2 用户封面 + 3 填充封面 = 6
+    # 主页：2 真卡 + 3 填充 = 5
+    assert len(home_cards) == 5
+    assert [c["title"] for c in home_cards[:2]] == ["用户卡A", "用户卡B"]
+    # 真卡有 href 指向详情页，封面=首图
+    assert home_cards[0]["href"] == "note-01.html"
+    assert home_cards[1]["href"] == "note-02.html"
+    assert home_cards[0]["cover"] == "assets/note-01-img-01.jpg"
+    assert home_cards[1]["cover"] == "assets/note-02-img-01.png"
+    # 填充卡无 href（不可点）
+    assert all("href" not in c for c in home_cards[2:])
+    # 缺省 likes 走占位
+    assert home_cards[1]["likes"] == gen.placeholder_likes("用户卡B")
+
+    # 详情页：每条笔记一个
+    assert len(note_pages) == 2
+    assert note_pages[0]["filename"] == "note-01.html"
+    assert note_pages[0]["slides"] == ["assets/note-01-img-01.jpg", "assets/note-01-img-02.png"]
+    assert note_pages[1]["slides"] == ["assets/note-02-img-01.png"]  # 回落单图
+
+    # 拷贝清单：头像 + (2 用户图) + (1 用户图) + 3 填充 = 7
     dests = [d for _, d in copies]
     assert "avatar.svg" in dests
-    assert "note-01.jpg" in dests and "note-02.png" in dests
+    assert "note-01-img-01.jpg" in dests and "note-01-img-02.png" in dests
+    assert "note-02-img-01.png" in dests
     assert sum(1 for d in dests if d.startswith("filler-")) == 3
-    # 用户卡相对路径正确解析（rel 以 pwd 为基准）
+    # 相对路径以 pwd 为基准
     srcs = dict((d, s) for s, d in copies)
-    assert srcs["note-01.jpg"] == "/abs/c1.jpg"
-    assert srcs["note-02.png"] == os.path.join("/pwd", "rel/c2.png")
+    assert srcs["note-01-img-01.jpg"] == "/abs/c1.jpg"
+    assert srcs["note-01-img-02.png"] == os.path.join("/pwd", "rel/c2.png")
+    assert srcs["note-02-img-01.png"] == os.path.join("/pwd", "rel/d1.png")
+
+
+def test_plan_render_title_body_fallback():
+    # 取不到标题/正文 → 固定回落「暂无标题」「暂无正文」（真实笔记）
+    content = {"notes": [{"images": ["/abs/x.png"]}]}   # 无 title、无 body
+    home_cards, note_pages, _ = gen.plan_render(content, _persona(), [], "/pwd", min_cards=1)
+    assert home_cards[0]["title"] == "暂无标题"
+    assert note_pages[0]["title"] == "暂无标题"
+    assert note_pages[0]["body"] == "暂无正文"
+    # 空白字符串也算取不到
+    content2 = {"notes": [{"images": ["/abs/x.png"], "title": "   ", "body": "\n  \n"}]}
+    _, np2, _ = gen.plan_render(content2, _persona(), [], "/pwd", min_cards=1)
+    assert np2[0]["title"] == "暂无标题" and np2[0]["body"] == "暂无正文"
+
+
+def test_plan_render_filler_title_not_forced(tmp_path):
+    # 填充卡标题为空时保持空，不应被塞「暂无标题」
+    filler_dir = tmp_path / "f"; filler_dir.mkdir()
+    (filler_dir / "a.svg").write_text("<svg/>", encoding="utf-8")  # 无 titles.json → title 空
+    fillers = gen.load_fillers(str(filler_dir))
+    content = {"notes": [{"images": ["/abs/x.png"], "title": "真卡"}]}
+    home_cards, _, _ = gen.plan_render(content, _persona(), fillers, "/pwd", min_cards=2)
+    assert home_cards[0]["title"] == "真卡"
+    assert home_cards[1]["title"] == ""          # 填充卡标题保持空
+
+
+def test_plan_render_single_note_uses_fillers(tmp_path):
+    filler_dir = _make_fillers(tmp_path, 6)
+    fillers = gen.load_fillers(filler_dir)
+    content = {"notes": [{"images": ["/abs/x.png"], "title": "唯一"}]}
+    home_cards, note_pages, _ = gen.plan_render(content, _persona(), fillers, "/pwd", min_cards=6)
+    assert len(note_pages) == 1                       # 单篇只出一个详情页
+    assert len(home_cards) == 6                       # 主页 1 真卡 + 5 填充补足
+    assert home_cards[0]["href"] == "note-01.html"
+    assert all("href" not in c for c in home_cards[1:])
 
 
 def test_format_count():
@@ -162,7 +234,39 @@ def test_format_count():
     assert gen.format_count("20000") == "2万"
 
 
-def test_render_html_replaces_tokens_and_injects_cards():
+def test_render_card_html_real_has_link_filler_does_not():
+    real = gen.render_card_html({"cover": "assets/n.jpg", "title": "t", "likes": 1,
+                                 "author": "a", "avatar": "assets/avatar.svg",
+                                 "href": "note-01.html"})
+    filler = gen.render_card_html({"cover": "assets/f.svg", "title": "f", "likes": 1,
+                                   "author": "a", "avatar": "assets/avatar.svg"})
+    assert '<a class="card-link" href="note-01.html">' in real
+    assert "card-link" not in filler                  # 填充卡不可点
+
+
+def test_render_dots_html():
+    assert gen.render_dots_html(1) == ""              # 单图无圆点
+    dots = gen.render_dots_html(3)
+    assert dots.count('<span class="dot') == 3
+    assert dots.count("active") == 1                  # 首点 active
+
+
+def test_render_slides_html():
+    out = gen.render_slides_html(["assets/a.png", "assets/b.png"])
+    assert out.count("<div class=\"slide\">") == 2
+    assert 'src="assets/a.png"' in out and 'src="assets/b.png"' in out
+
+
+def test_render_body_html_paragraphs_and_escape():
+    out = gen.render_body_html("第一段 <b>\n续行\n\n第二段 & 收尾")
+    assert out.count("<p>") == 2                       # 空行切两段
+    assert "<br>" in out                               # 段内换行
+    assert "&lt;b&gt;" in out and "&amp;" in out       # 转义
+    assert gen.render_body_html("") == ""              # 空正文整块不渲染
+    assert gen.render_body_html("   ") == ""
+
+
+def test_render_home_html_replaces_tokens_and_injects_cards():
     template = (
         "<h1>{{NICKNAME}}</h1><p>{{BIO}}</p><i>{{RED_ID}}</i>"
         "<span>{{FOLLOWING}}/{{FOLLOWERS}}/{{LIKES}}</span>"
@@ -172,38 +276,44 @@ def test_render_html_replaces_tokens_and_injects_cards():
     persona = {"nickname": "阿<喵>", "bio": "bio", "red_id": "xhs_1",
                "following": "88", "followers": "1024", "likes": "20000",
                "avatar_rel": "assets/avatar.svg"}
-    cards = [{"cover": "assets/note-01.jpg", "title": "标题&", "likes": 1234,
-              "author": "阿<喵>", "avatar": "assets/avatar.svg"}]
-    out = gen.render_html(template, persona, cards)
+    cards = [{"cover": "assets/note-01-img-01.jpg", "title": "标题&", "likes": 1234,
+              "author": "阿<喵>", "avatar": "assets/avatar.svg", "href": "note-01.html"}]
+    out = gen.render_home_html(template, persona, cards)
 
     assert "阿&lt;喵&gt;" in out                       # 昵称被 HTML 转义
     assert "标题&amp;" in out                           # 卡标题被转义
     assert 'src="{{AVATAR}}"' not in out               # 头像 token 被替换
-    assert 'src="assets/avatar.svg"' in out            # 替成相对路径（未被转义破坏）
-    assert 'src="assets/note-01.jpg"' in out           # 卡封面相对 <img>
-    assert "<!--CARDS-->" not in out                   # 占位被卡片替换
+    assert 'src="assets/avatar.svg"' in out
+    assert 'href="note-01.html"' in out                # 卡片链接
+    assert "<!--CARDS-->" not in out
     assert "2万" in out                                 # 获赞数格式化
-    assert "1234" in out                                # 卡 likes 渲染（<10000 原样）
 
 
-def test_render_html_all_images_relative():
-    template = '<img src="{{AVATAR}}"><div><!--CARDS--></div>'
-    persona = {"nickname": "n", "bio": "", "red_id": "", "following": "0",
-               "followers": "0", "likes": "0", "avatar_rel": "assets/avatar.svg"}
-    cards = [{"cover": "assets/note-01.jpg", "title": "t", "likes": 1,
-              "author": "n", "avatar": "assets/avatar.svg"}]
-    out = gen.render_html(template, persona, cards)
-    srcs = re.findall(r'src="([^"]+)"', out)
-    assert srcs and all(s.startswith("assets/") for s in srcs)   # 全相对，preview-share 可扫描
+def test_render_note_html_swiper_title_body():
+    template = ('<title>{{TITLE}}·{{NICKNAME}}</title><img src="{{AVATAR}}">'
+                '<div class="track"><!--SLIDES--></div><div class="dots"><!--DOTS--></div>'
+                '<h1>{{TITLE}}</h1><!--BODY--><span>{{LIKES_NOTE}}</span>')
+    persona = _persona()
+    page = {"filename": "note-01.html", "title": "我的<笔记>", "body": "正文A\n\n正文B",
+            "likes": 2175, "slides": ["assets/note-01-img-01.png", "assets/note-01-img-02.png"]}
+    out = gen.render_note_html(template, persona, page)
+
+    assert "我的&lt;笔记&gt;" in out                    # 标题转义
+    assert out.count('class="slide"') == 2             # 轮播两张
+    assert out.count('<span class="dot') == 2          # 两个圆点 span（不含 .dots 容器）
+    assert "<p>正文A</p>" in out and "<p>正文B</p>" in out
+    assert "{{TITLE}}" not in out and "{{LIKES_NOTE}}" not in out
+    assert "2175" in out                               # 笔记点赞 <10000 原样
 
 
-def test_render_html_no_second_pass_token_substitution():
-    template = "<h1>{{NICKNAME}}</h1><span>{{LIKES}}</span><!--CARDS-->"
-    persona = {"nickname": "{{LIKES}}", "bio": "", "red_id": "", "following": "0",
-               "followers": "0", "likes": "20000", "avatar_rel": "assets/avatar.svg"}
-    out = gen.render_html(template, persona, [])
-    assert "{{LIKES}}" in out          # nickname 的字面 {{LIKES}} 不被替换
-    assert out.count("2万") == 1        # 只有真正的 {{LIKES}} token 被格式化
+def test_render_note_html_single_image_no_dots_no_body():
+    template = ('<div class="track"><!--SLIDES--></div><div class="dots"><!--DOTS--></div>'
+                '<h1>{{TITLE}}</h1><!--BODY-->')
+    page = {"title": "t", "body": "", "likes": 5, "slides": ["assets/note-01-img-01.png"]}
+    out = gen.render_note_html(template, _persona(), page)
+    assert out.count('class="slide"') == 1
+    assert '<span class="dot' not in out               # 单图无圆点 span
+    assert 'class="body"' not in out                   # 空正文不渲染
 
 
 def _run(argv, cwd):
@@ -215,41 +325,132 @@ def _run(argv, cwd):
         os.chdir(old)
 
 
-def test_main_real_generation(tmp_path):
+def test_main_real_generation_multi_page(tmp_path):
     cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
     content = tmp_path / "content.json"
     content.write_text(json.dumps({"label": "iot", "notes": [
-        {"cover": cover, "title": "我的第一篇笔记"}]}, ensure_ascii=False), encoding="utf-8")
+        {"title": "我的第一篇笔记", "body": "段落一\n\n段落二",
+         "images": [cover, cover]}]}, ensure_ascii=False), encoding="utf-8")
 
     rc = _run(["--template", "xiaohongshu", "--content", str(content),
                "--label", "iot", "--out", str(tmp_path / "out")], cwd=str(tmp_path))
     assert rc == 0
     out = tmp_path / "out"
     assert (out / "index.html").is_file()
+    assert (out / "note-01.html").is_file()
     assert (out / "content.json").is_file()
-    assert (out / "assets" / "note-01.jpg").is_file()
+    assert (out / "assets" / "note-01-img-01.jpg").is_file()
+    assert (out / "assets" / "note-01-img-02.jpg").is_file()
     assert (out / "assets" / "avatar.svg").is_file()
     fillers = list((out / "assets").glob("filler-*.svg"))
     assert len(fillers) >= 1
-    htmltext = (out / "index.html").read_text(encoding="utf-8")
-    assert "我的第一篇笔记" in htmltext
-    assert "小红薯" in htmltext
-    srcs = re.findall(r'src="([^"]+)"', htmltext)
-    assert srcs
-    for s in srcs:
+
+    home = (out / "index.html").read_text(encoding="utf-8")
+    assert "我的第一篇笔记" in home
+    assert 'href="note-01.html"' in home               # 主页卡链到详情
+    assert "小红薯" in home                              # 默认人设
+    # 主页所有 img 相对、可解析
+    for s in re.findall(r'src="([^"]+)"', home):
+        assert s.startswith("assets/")
+        assert (out / s).is_file()
+
+    note = (out / "note-01.html").read_text(encoding="utf-8")
+    assert note.count('class="slide"') == 2            # 轮播两张
+    assert "段落一" in note and "段落二" in note
+    assert 'href="index.html"' in note                 # 返回主页
+    for s in re.findall(r'src="([^"]+)"', note):
         assert s.startswith("assets/")
         assert (out / s).is_file()
 
 
-def test_main_dry_run_writes_nothing(tmp_path):
+def test_main_stdout_prints_all_page_paths(tmp_path, capsys):
     cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
     content = tmp_path / "content.json"
-    content.write_text(json.dumps({"notes": [{"cover": cover, "title": "t"}]}), encoding="utf-8")
+    content.write_text(json.dumps({"notes": [
+        {"title": "A", "images": [cover]},
+        {"title": "B", "images": [cover]}]}), encoding="utf-8")
+    out = tmp_path / "out"
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--out", str(out)], cwd=str(tmp_path))
+    assert rc == 0
+    lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
+    assert lines[0] == str(out / "index.html")         # 第一行=主页（移交 preview-share 的入口）
+    assert str(out / "note-01.html") in lines
+    assert str(out / "note-02.html") in lines
+    assert len(lines) == 3                              # 主页 + 2 笔记页
+
+
+def test_main_backward_compatible_cover_only(tmp_path):
+    # 老 content.json（仅 cover，无 images/body）：退化为单图详情页
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": [{"cover": cover, "title": "老格式"}]}), encoding="utf-8")
+    out = tmp_path / "out"
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--out", str(out)], cwd=str(tmp_path))
+    assert rc == 0
+    assert (out / "note-01.html").is_file()
+    assert (out / "assets" / "note-01-img-01.jpg").is_file()
+    note = (out / "note-01.html").read_text(encoding="utf-8")
+    assert note.count('class="slide"') == 1
+    assert "暂无正文" in note                            # 无 body → 固定回落
+
+
+def test_main_default_root_is_pwd(tmp_path):
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": [{"images": [cover], "title": "t"}]}), encoding="utf-8")
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--name", "my-page"], cwd=str(tmp_path))
+    assert rc == 0
+    assert (tmp_path / "my-page" / "index.html").is_file()
+    assert not (tmp_path / "template-preview").exists()
+
+
+def test_main_name_skips_pattern_and_slugifies(tmp_path):
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": [{"images": [cover], "title": "t"}]}), encoding="utf-8")
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--name", "我的 主页!"], cwd=str(tmp_path))
+    assert rc == 0
+    assert (tmp_path / "我的-主页" / "index.html").is_file()
+
+
+def test_main_out_root_custom_parent(tmp_path):
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": [{"images": [cover], "title": "t"}]}), encoding="utf-8")
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--name", "p", "--out-root", str(tmp_path / "custom")], cwd=str(tmp_path))
+    assert rc == 0
+    assert (tmp_path / "custom" / "p" / "index.html").is_file()
+
+
+def test_main_out_root_flag_overrides_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("TPL_OUTPUT_ROOT", str(tmp_path / "from_env"))
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": [{"images": [cover], "title": "t"}]}), encoding="utf-8")
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--name", "p", "--out-root", str(tmp_path / "from_flag")], cwd=str(tmp_path))
+    assert rc == 0
+    assert (tmp_path / "from_flag" / "p" / "index.html").is_file()
+    assert not (tmp_path / "from_env").exists()
+
+
+def test_main_dry_run_writes_nothing(tmp_path, capsys):
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": [{"images": [cover], "title": "t"}]}), encoding="utf-8")
     out = tmp_path / "out"
     rc = _run(["--template", "xiaohongshu", "--content", str(content),
                "--label", "d", "--out", str(out), "--dry-run"], cwd=str(tmp_path))
     assert rc == 0
     assert not out.exists()
+    lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
+    assert lines[0] == str(out / "index.html")         # dry-run 也打印将生成的页面
+    assert str(out / "note-01.html") in lines
 
 
 def test_main_unknown_template(tmp_path):
@@ -264,7 +465,7 @@ def test_main_refuses_overwrite_on_derived_path(tmp_path, monkeypatch):
     monkeypatch.setenv("TPL_OUTPUT_ROOT", str(tmp_path / "root"))
     cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
     content = tmp_path / "c.json"
-    content.write_text(json.dumps({"notes": [{"cover": cover, "title": "t"}]}), encoding="utf-8")
+    content.write_text(json.dumps({"notes": [{"images": [cover], "title": "t"}]}), encoding="utf-8")
     args = ["--template", "xiaohongshu", "--content", str(content), "--label", "dup"]
     assert _run(args, cwd=str(tmp_path)) == 0
     assert _run(args, cwd=str(tmp_path)) == 2
@@ -282,15 +483,15 @@ def test_main_bad_min_cards_returns_2(tmp_path, monkeypatch):
     monkeypatch.setenv("TPL_XHS_MIN_CARDS", "abc")
     cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
     content = tmp_path / "content.json"
-    content.write_text(json.dumps({"notes": [{"cover": cover, "title": "t"}]}), encoding="utf-8")
+    content.write_text(json.dumps({"notes": [{"images": [cover], "title": "t"}]}), encoding="utf-8")
     rc = _run(["--template", "xiaohongshu", "--content", str(content),
                "--out", str(tmp_path / "o")], cwd=str(tmp_path))
     assert rc == 2
 
 
-def test_main_note_missing_cover_returns_2(tmp_path):
+def test_main_note_missing_image_returns_2(tmp_path):
     content = tmp_path / "content.json"
-    content.write_text(json.dumps({"notes": [{"title": "no cover"}]}), encoding="utf-8")
+    content.write_text(json.dumps({"notes": [{"title": "no image"}]}), encoding="utf-8")
     rc = _run(["--template", "xiaohongshu", "--content", str(content),
                "--out", str(tmp_path / "o")], cwd=str(tmp_path))
     assert rc == 2
@@ -313,15 +514,19 @@ def test_output_is_scannable_by_preview_share(tmp_path):
 
     cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
     content = tmp_path / "content.json"
-    content.write_text(json.dumps({"notes": [{"cover": cover, "title": "n"}]}), encoding="utf-8")
+    content.write_text(json.dumps({"notes": [
+        {"title": "n1", "images": [cover, cover]},
+        {"title": "n2", "images": [cover]}]}), encoding="utf-8")
     out = tmp_path / "out"
     _run(["--template", "xiaohongshu", "--content", str(content),
           "--label", "x", "--out", str(out)], cwd=str(tmp_path))
 
+    # 以 index.html 为入口，扫描器应沿 href 跟进到所有笔记页 + 其图
     collected, missing = psmod.scan_deps(str(out / "index.html"))
-    # 入口的所有相对引用都能在本地找到（线上不裂图）
-    assert missing == []
+    assert missing == []                               # 无裂图引用（含填充卡）
     names = {os.path.basename(p) for p in collected}
-    assert "note-01.jpg" in names                     # 用户封面被扫到
-    assert any(n.startswith("filler-") for n in names)  # 填充卡被扫到
-    assert any(n == "avatar.svg" for n in names)        # 头像被扫到
+    assert "note-01.html" in names and "note-02.html" in names   # 经 href 跟进到详情页
+    assert "note-01-img-01.jpg" in names and "note-01-img-02.jpg" in names
+    assert "note-02-img-01.jpg" in names
+    assert any(n.startswith("filler-") for n in names)  # 填充卡图
+    assert "avatar.svg" in names
