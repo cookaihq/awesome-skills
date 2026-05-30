@@ -288,6 +288,22 @@ def test_main_bad_min_cards_returns_2(tmp_path, monkeypatch):
     assert rc == 2
 
 
+def test_main_note_missing_cover_returns_2(tmp_path):
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": [{"title": "no cover"}]}), encoding="utf-8")
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--out", str(tmp_path / "o")], cwd=str(tmp_path))
+    assert rc == 2
+
+
+def test_main_notes_not_a_list_returns_2(tmp_path):
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": {"cover": "x"}}), encoding="utf-8")
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--out", str(tmp_path / "o")], cwd=str(tmp_path))
+    assert rc == 2
+
+
 def test_output_is_scannable_by_preview_share(tmp_path):
     # 加载 preview-share 的真实依赖扫描器
     ps = os.path.join(HERE, "..", "..", "preview-share", "scripts", "upload.py")

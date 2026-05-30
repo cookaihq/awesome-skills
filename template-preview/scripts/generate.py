@@ -285,6 +285,14 @@ def main(argv=None):
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         log(f"[error] content.json 解析失败: {e}")
         return 2
+    notes = content.get("notes", [])
+    if not isinstance(notes, list):
+        log("[error] content.json 的 notes 必须是数组")
+        return 2
+    for i, n in enumerate(notes, 1):
+        if not isinstance(n, dict) or not n.get("cover"):
+            log(f"[error] notes[{i}] 缺少 cover 字段")
+            return 2
     fillers = load_fillers(filler_dir)
     cards, copies = plan_render(content, persona, fillers, pwd, min_cards)
 
