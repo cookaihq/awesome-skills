@@ -268,7 +268,11 @@ def main(argv=None):
     persona_cfg, _ = resolve_config([prefix + s for s in suffixes], tmpl_defaults)
 
     persona = _build_persona(prefix, persona_cfg, template_dir, pwd)
-    min_cards = int(persona_cfg.get(prefix + "MIN_CARDS") or 6)
+    try:
+        min_cards = int(persona_cfg.get(prefix + "MIN_CARDS") or 6)
+    except ValueError:
+        log(f"[error] {prefix}MIN_CARDS 不是整数: {persona_cfg.get(prefix + 'MIN_CARDS')!r}")
+        return 2
 
     raw_fillers = persona_cfg.get(prefix + "FILLER_CARDS")
     if raw_fillers:
@@ -276,7 +280,11 @@ def main(argv=None):
     else:
         filler_dir = os.path.join(template_dir, "assets", "fillers")
 
-    content = load_content(args.content)
+    try:
+        content = load_content(args.content)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        log(f"[error] content.json 解析失败: {e}")
+        return 2
     fillers = load_fillers(filler_dir)
     cards, copies = plan_render(content, persona, fillers, pwd, min_cards)
 
@@ -306,7 +314,8 @@ def main(argv=None):
         log("  改 --label，或在 TPL_SUBDIR_PATTERN 中保留 {time} 以保证唯一。")
         return 2
 
-    template_str = open(os.path.join(template_dir, "template.html"), encoding="utf-8").read()
+    with open(os.path.join(template_dir, "template.html"), encoding="utf-8") as tf:
+        template_str = tf.read()
     html_out = render_html(template_str, persona, cards)
 
     assets_dir = os.path.join(out_dir, "assets")

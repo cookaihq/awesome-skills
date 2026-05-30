@@ -215,7 +215,7 @@ def _run(argv, cwd):
         os.chdir(old)
 
 
-def test_main_real_generation(tmp_path, capsys):
+def test_main_real_generation(tmp_path):
     cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
     content = tmp_path / "content.json"
     content.write_text(json.dumps({"label": "iot", "notes": [
@@ -268,3 +268,21 @@ def test_main_refuses_overwrite_on_derived_path(tmp_path, monkeypatch):
     args = ["--template", "xiaohongshu", "--content", str(content), "--label", "dup"]
     assert _run(args, cwd=str(tmp_path)) == 0
     assert _run(args, cwd=str(tmp_path)) == 2
+
+
+def test_main_bad_json_returns_2(tmp_path):
+    content = tmp_path / "content.json"
+    content.write_text("{not valid json", encoding="utf-8")
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--out", str(tmp_path / "o")], cwd=str(tmp_path))
+    assert rc == 2
+
+
+def test_main_bad_min_cards_returns_2(tmp_path, monkeypatch):
+    monkeypatch.setenv("TPL_XHS_MIN_CARDS", "abc")
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": [{"cover": cover, "title": "t"}]}), encoding="utf-8")
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--out", str(tmp_path / "o")], cwd=str(tmp_path))
+    assert rc == 2
