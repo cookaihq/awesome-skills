@@ -204,3 +204,67 @@ def test_render_html_no_second_pass_token_substitution():
     out = gen.render_html(template, persona, [])
     assert "{{LIKES}}" in out          # nickname 的字面 {{LIKES}} 不被替换
     assert out.count("2万") == 1        # 只有真正的 {{LIKES}} token 被格式化
+
+
+def _run(argv, cwd):
+    old = os.getcwd()
+    os.chdir(cwd)
+    try:
+        return gen.main(argv)
+    finally:
+        os.chdir(old)
+
+
+def test_main_real_generation(tmp_path, capsys):
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"label": "iot", "notes": [
+        {"cover": cover, "title": "我的第一篇笔记"}]}, ensure_ascii=False), encoding="utf-8")
+
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--label", "iot", "--out", str(tmp_path / "out")], cwd=str(tmp_path))
+    assert rc == 0
+    out = tmp_path / "out"
+    assert (out / "index.html").is_file()
+    assert (out / "content.json").is_file()
+    assert (out / "assets" / "note-01.jpg").is_file()
+    assert (out / "assets" / "avatar.svg").is_file()
+    fillers = list((out / "assets").glob("filler-*.svg"))
+    assert len(fillers) >= 1
+    htmltext = (out / "index.html").read_text(encoding="utf-8")
+    assert "我的第一篇笔记" in htmltext
+    assert "小红薯" in htmltext
+    srcs = re.findall(r'src="([^"]+)"', htmltext)
+    assert srcs
+    for s in srcs:
+        assert s.startswith("assets/")
+        assert (out / s).is_file()
+
+
+def test_main_dry_run_writes_nothing(tmp_path):
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "content.json"
+    content.write_text(json.dumps({"notes": [{"cover": cover, "title": "t"}]}), encoding="utf-8")
+    out = tmp_path / "out"
+    rc = _run(["--template", "xiaohongshu", "--content", str(content),
+               "--label", "d", "--out", str(out), "--dry-run"], cwd=str(tmp_path))
+    assert rc == 0
+    assert not out.exists()
+
+
+def test_main_unknown_template(tmp_path):
+    content = tmp_path / "c.json"
+    content.write_text('{"notes":[]}', encoding="utf-8")
+    rc = _run(["--template", "nope", "--content", str(content)], cwd=str(tmp_path))
+    assert rc == 2
+
+
+def test_main_refuses_overwrite_on_derived_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("TPL_SUBDIR_PATTERN", "{label}")
+    monkeypatch.setenv("TPL_OUTPUT_ROOT", str(tmp_path / "root"))
+    cover = os.path.join(HERE, "fixtures", "sample-cover.jpg")
+    content = tmp_path / "c.json"
+    content.write_text(json.dumps({"notes": [{"cover": cover, "title": "t"}]}), encoding="utf-8")
+    args = ["--template", "xiaohongshu", "--content", str(content), "--label", "dup"]
+    assert _run(args, cwd=str(tmp_path)) == 0
+    assert _run(args, cwd=str(tmp_path)) == 2

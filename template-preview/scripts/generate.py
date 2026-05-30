@@ -220,3 +220,111 @@ def render_html(template_str, persona, cards):
     out = _TOKEN_RE.sub(lambda m: values[m.group(1)], template_str)
     out = out.replace("<!--CARDS-->", cards_html)
     return out
+
+
+def _build_persona(prefix, persona_cfg, template_dir, pwd):
+    raw_avatar = persona_cfg.get(prefix + "AVATAR")
+    if raw_avatar:
+        avatar_path = raw_avatar if os.path.isabs(raw_avatar) else os.path.join(pwd, raw_avatar)
+    else:
+        avatar_path = os.path.join(template_dir, "assets", "avatar-default.svg")
+    return {
+        "nickname": persona_cfg.get(prefix + "NICKNAME", ""),
+        "bio": persona_cfg.get(prefix + "BIO", ""),
+        "red_id": persona_cfg.get(prefix + "RED_ID", ""),
+        "following": persona_cfg.get(prefix + "FOLLOWING", "0"),
+        "followers": persona_cfg.get(prefix + "FOLLOWERS", "0"),
+        "likes": persona_cfg.get(prefix + "LIKES", "0"),
+        "avatar_path": avatar_path,
+        "avatar_rel": "assets/avatar" + ext_of(avatar_path, ".svg"),
+    }
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="把图片+文案渲染成指定模板风格的自包含展示页")
+    ap.add_argument("--template", required=True, help="模板名（v1 仅 xiaohongshu）")
+    ap.add_argument("--content", required=True, help="content.json 路径")
+    ap.add_argument("--label", default="", help="子目录标签，参与 TPL_SUBDIR_PATTERN")
+    ap.add_argument("--out", help="直接指定输出目录（最高优先级，覆盖 root/pattern）")
+    ap.add_argument("--dry-run", action="store_true", help="只打印计划，不写盘")
+    args = ap.parse_args(argv)
+
+    pwd = os.getcwd()
+    now = datetime.datetime.now()
+
+    template_dir = os.path.join(TEMPLATES_DIR, args.template)
+    prefix = TEMPLATE_VAR_PREFIX.get(args.template)
+    if not os.path.isdir(template_dir) or prefix is None:
+        log(f"[error] 未知模板: {args.template}（可用: {', '.join(TEMPLATE_VAR_PREFIX)}）")
+        return 2
+    if not os.path.isfile(args.content):
+        log(f"[error] content.json 不存在: {args.content}")
+        return 2
+
+    skill_cfg, _ = resolve_config(list(SKILL_DEFAULTS), SKILL_DEFAULTS)
+    tmpl_defaults = parse_env_file(os.path.join(template_dir, "defaults.env"))
+    suffixes = ("NICKNAME", "BIO", "RED_ID", "AVATAR", "FOLLOWING",
+                "FOLLOWERS", "LIKES", "FILLER_CARDS", "MIN_CARDS")
+    persona_cfg, _ = resolve_config([prefix + s for s in suffixes], tmpl_defaults)
+
+    persona = _build_persona(prefix, persona_cfg, template_dir, pwd)
+    min_cards = int(persona_cfg.get(prefix + "MIN_CARDS") or 6)
+
+    raw_fillers = persona_cfg.get(prefix + "FILLER_CARDS")
+    if raw_fillers:
+        filler_dir = raw_fillers if os.path.isabs(raw_fillers) else os.path.join(pwd, raw_fillers)
+    else:
+        filler_dir = os.path.join(template_dir, "assets", "fillers")
+
+    content = load_content(args.content)
+    fillers = load_fillers(filler_dir)
+    cards, copies = plan_render(content, persona, fillers, pwd, min_cards)
+
+    label = args.label or content.get("label", "")
+    try:
+        subdir = render_subdir(skill_cfg["TPL_SUBDIR_PATTERN"], label, now)
+    except KeyError as e:
+        log(f"[error] TPL_SUBDIR_PATTERN 含未知占位符: {e}；仅支持 {{date}}/{{time}}/{{label}}")
+        return 2
+    out_dir = build_output_dir(args.out, skill_cfg["TPL_OUTPUT_ROOT"], subdir, pwd)
+    index_path = os.path.join(out_dir, "index.html")
+
+    log(f"[plan] 模板: {args.template}")
+    log(f"[plan] 输出目录: {out_dir}")
+    log(f"[plan] 卡片: {len(cards)}（用户 {len(content.get('notes', []))} + 填充，min={min_cards}）")
+    for src, dest in copies:
+        warn = "" if os.path.isfile(src) else "  [warn 源缺失，线上会裂图]"
+        log(f"   assets/{dest} <- {src}{warn}")
+
+    if args.dry_run:
+        log("[dry-run] 未写盘。")
+        print(index_path)
+        return 0
+
+    if not args.out and os.path.exists(out_dir):
+        log(f"[error] 输出目录已存在，拒绝覆盖: {out_dir}")
+        log("  改 --label，或在 TPL_SUBDIR_PATTERN 中保留 {time} 以保证唯一。")
+        return 2
+
+    template_str = open(os.path.join(template_dir, "template.html"), encoding="utf-8").read()
+    html_out = render_html(template_str, persona, cards)
+
+    assets_dir = os.path.join(out_dir, "assets")
+    os.makedirs(assets_dir, exist_ok=True)
+    for src, dest in copies:
+        if os.path.isfile(src):
+            shutil.copy2(src, os.path.join(assets_dir, dest))
+        else:
+            log(f"[warn] 跳过缺失素材: {src}")
+    with open(index_path, "w", encoding="utf-8") as f:
+        f.write(html_out)
+    with open(os.path.join(out_dir, "content.json"), "w", encoding="utf-8") as f:
+        json.dump(content, f, ensure_ascii=False, indent=2)
+
+    log(f"[done] 输出: {out_dir}")
+    print(index_path)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
