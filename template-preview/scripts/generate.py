@@ -75,3 +75,23 @@ def resolve_config(varnames, builtin_defaults):
                 src[var] = label
                 break
     return cfg, src
+
+
+def slugify_label(label):
+    s = re.sub(r"[^A-Za-z0-9._一-鿿-]+", "-", (label or "").strip()).strip("-")
+    return s or "preview"
+
+
+def render_subdir(pattern, label, now):
+    return pattern.format(
+        date=now.strftime("%Y%m%d"),
+        time=now.strftime("%H%M%S"),
+        label=slugify_label(label),
+    ).strip("/")
+
+
+def build_output_dir(out_arg, output_root, subdir, pwd):
+    if out_arg:
+        return os.path.abspath(out_arg)
+    root = output_root if os.path.isabs(output_root) else os.path.join(pwd, output_root)
+    return os.path.join(root, subdir)
