@@ -13,6 +13,7 @@ def test_dedup_key_changes_with_any_param():
     assert dedup.dedup_key("gpt-5.5", "bye", None, ["/a.png"], 64, None, None, None) != base
     assert dedup.dedup_key("gpt-5.5", "hi", None, ["/a.png", "/c.mp3"], 64, None, None, None) != base
     assert dedup.dedup_key("gpt-5.5", "hi", None, ["/a.png"], 128, None, None, None) != base
+    assert dedup.dedup_key("gpt-5.5", "hi", "sys", ["/a.png"], 64, None, None, None) != base
 
 
 def test_dedup_key_uses_input_sources_not_post_upload_urls():

@@ -36,3 +36,4 @@ def test_check_capabilities_ok():
     ok, reason, suggestions = models.check_capabilities(SAMPLE, "gemini-3.5-flash", ["vision", "video"])
     assert ok is True
     assert reason == ""
+    assert suggestions == []
