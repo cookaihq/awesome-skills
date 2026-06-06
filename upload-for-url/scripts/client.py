@@ -11,7 +11,7 @@ Resp = namedtuple("Resp", "status json text")
 
 
 def encode_multipart(fields: dict, file_field: str, filename: str,
-                     file_bytes: bytes, boundary: str = DEFAULT_BOUNDARY) -> tuple:
+                     file_bytes: bytes, boundary: str = DEFAULT_BOUNDARY) -> tuple[str, bytes]:
     """Build a multipart/form-data body. Returns (content_type, body_bytes)."""
     b = boundary.encode()
     crlf = b"\r\n"
@@ -53,7 +53,7 @@ def http_request(method: str, url: str, headers: dict,
     return Resp(status, parsed, text)
 
 
-def call_with_key_fallback(keys: list, attempt) -> tuple:
+def call_with_key_fallback(keys: list, attempt) -> tuple[Resp, str]:
     """Try each key via attempt(key)->Resp. Advance to the next key ONLY on HTTP
     401 (auth error; 401 does not consume credits). Any other status (or success)
     stops immediately. Returns (Resp, used_key). Raises ValueError if no keys."""

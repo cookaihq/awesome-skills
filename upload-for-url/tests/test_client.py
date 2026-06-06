@@ -1,3 +1,8 @@
+import io
+import urllib.error
+
+import pytest
+
 import client
 
 
@@ -16,10 +21,7 @@ def test_encode_multipart_structure():
     assert b"\x00\x01BINARY" in body
     assert body.endswith(b"--BOUND123--\r\n")
     assert body.startswith(b"--BOUND123\r\n")
-
-
-import io
-import urllib.error
+    assert b'name="auto_cleanup"\r\n\r\ntrue\r\n' in body
 
 
 class _FakeHTTPResponse:
@@ -98,6 +100,5 @@ def test_fallback_all_401_returns_last():
 
 
 def test_fallback_empty_keys_raises():
-    import pytest
     with pytest.raises(ValueError):
         client.call_with_key_fallback([], lambda k: _resp(200))
