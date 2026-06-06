@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
+
 
 def parse_dotenv(text: str) -> dict:
     """Minimal, non-shell .env parser. Supports KEY=value / KEY="value" /
     KEY='value', whitespace around =, leading-# comment lines, blank lines.
-    Last occurrence wins. No ${X} / $(...) / line-continuation expansion."""
+    Last occurrence wins. No ${X} / $(...) / line-continuation expansion.
+    Does not strip an `export ` prefix or trailing inline `# comments` — values are literal."""
     out: dict = {}
     for line in text.splitlines():
         stripped = line.strip()
@@ -28,15 +31,12 @@ def read_key_from_dotenv(path: str) -> "str | None":
     return parse_dotenv(text).get("X_API_KEY")
 
 
-import os
-
-
 def resolve_api_keys(environ: dict, cwd: str, use_local_key: bool, config_dir: str) -> list:
     """Ordered candidate X_API_KEY list (first = highest priority), value-deduped.
     Sources: process env -> $cwd/.env.local -> $cwd/.env -> $config_dir/.env (only
     when use_local_key). $cwd files are read non-recursively (current dir only)."""
     candidates = []
-    env_key = environ.get("X_API_KEY")
+    env_key = (environ.get("X_API_KEY") or "").strip()
     if env_key:
         candidates.append(env_key)
     for fname in (".env.local", ".env"):

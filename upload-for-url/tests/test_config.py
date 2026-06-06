@@ -72,3 +72,5 @@ def test_mask_key():
     assert config.mask_key("sk-1234567890abcd") == "sk-1****abcd"
     assert config.mask_key("short") == "****"
     assert config.mask_key("") == "(empty)"
+    assert config.mask_key("123456789") == "1234****6789"  # 9-char: first of long branch
+    assert config.mask_key("12345678") == "****"            # 8-char: last of short branch
