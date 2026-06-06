@@ -114,3 +114,21 @@ def test_main_413_returns_1(monkeypatch, tmp_path, capsys):
     code = upload.main(["--file", str(f)])
     assert code == 1
     assert "文件过大" in capsys.readouterr().err
+
+
+def test_interpret_upload_non_dict_json_raises_uploaderror():
+    # upstream may return a JSON array/scalar (proxy/CDN non-object body) — must raise
+    # a clean UploadError, NOT crash with AttributeError on .get()
+    with pytest.raises(upload.UploadError):
+        upload.interpret_upload(Resp(500, ["unexpected", "array"], ""))
+    with pytest.raises(upload.UploadError):
+        upload.interpret_upload(Resp(200, ["no", "url"], ""))
+
+
+def test_main_missing_file_returns_1(monkeypatch, capsys):
+    monkeypatch.setenv("X_API_KEY", "sk-abcd1234efgh")
+    code = upload.main(["--file", "/nonexistent/definitely/missing.bin"])
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "无法读取文件" in err
+    assert "Traceback" not in err

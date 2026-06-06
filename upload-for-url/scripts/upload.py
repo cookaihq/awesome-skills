@@ -66,11 +66,11 @@ def run_upload(full_url, headers, body, keys, transport=None) -> tuple:
 
 
 def interpret_upload(resp) -> dict:
-    if resp.status == 200 and resp.json and resp.json.get("url"):
+    if resp.status == 200 and isinstance(resp.json, dict) and resp.json.get("url"):
         return resp.json
     hint = ERROR_HINTS.get(resp.status, "未预期的响应")
     server_msg = ""
-    if resp.json and isinstance(resp.json.get("error"), dict):
+    if isinstance(resp.json, dict) and isinstance(resp.json.get("error"), dict):
         server_msg = resp.json["error"].get("message", "")
     message = "[HTTP %s] %s" % (resp.status, hint)
     if server_msg:
@@ -106,14 +106,18 @@ def main(argv=None) -> int:
         return 2
 
     auto_cleanup = not args.no_auto_cleanup
-    if args.file:
-        with open(args.file, "rb") as fh:
-            file_bytes = fh.read()
+    if args.file is not None:
+        try:
+            with open(args.file, "rb") as fh:
+                file_bytes = fh.read()
+        except OSError as e:
+            print("无法读取文件 %s: %s" % (args.file, e.strerror or e), file=sys.stderr)
+            return 1
         url, headers, body = build_request(
             "stream", base_url=args.base_url, file_bytes=file_bytes,
             filename=args.file_name or os.path.basename(args.file),
             file_name=args.file_name, auto_cleanup=auto_cleanup)
-    elif args.base64_data:
+    elif args.base64_data is not None:
         url, headers, body = build_request(
             "base64", base_url=args.base_url, file_data=args.base64_data,
             file_name=args.file_name, auto_cleanup=auto_cleanup)
