@@ -59,3 +59,45 @@ def test_http_request_returns_status_on_httperror(monkeypatch):
     resp = client.http_request("POST", "https://api.foxapi.cc/v1/files/upload/stream", {}, body=b"x")
     assert resp.status == 413
     assert resp.json["error"]["type"] == "file_too_large_error"
+
+
+def _resp(status):
+    return client.Resp(status, None, "")
+
+
+def test_fallback_advances_only_on_401():
+    tried = []
+
+    def attempt(key):
+        tried.append(key)
+        return _resp(401) if key == "bad" else _resp(200)
+
+    resp, used = client.call_with_key_fallback(["bad", "good"], attempt)
+    assert resp.status == 200
+    assert used == "good"
+    assert tried == ["bad", "good"]
+
+
+def test_fallback_stops_on_non_401():
+    tried = []
+
+    def attempt(key):
+        tried.append(key)
+        return _resp(413)
+
+    resp, used = client.call_with_key_fallback(["k1", "k2"], attempt)
+    assert resp.status == 413
+    assert used == "k1"
+    assert tried == ["k1"]  # did NOT try k2
+
+
+def test_fallback_all_401_returns_last():
+    resp, used = client.call_with_key_fallback(["a", "b"], lambda k: _resp(401))
+    assert resp.status == 401
+    assert used == "b"
+
+
+def test_fallback_empty_keys_raises():
+    import pytest
+    with pytest.raises(ValueError):
+        client.call_with_key_fallback([], lambda k: _resp(200))
