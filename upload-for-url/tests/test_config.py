@@ -66,3 +66,9 @@ def test_resolve_api_keys_config_dir_only_with_flag(tmp_path):
     assert without == []
     with_flag = config.resolve_api_keys({}, str(tmp_path), use_local_key=True, config_dir=str(cfg))
     assert with_flag == ["sk-persist"]
+
+
+def test_mask_key():
+    assert config.mask_key("sk-1234567890abcd") == "sk-1****abcd"
+    assert config.mask_key("short") == "****"
+    assert config.mask_key("") == "(empty)"

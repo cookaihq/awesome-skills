@@ -54,3 +54,11 @@ def resolve_api_keys(environ: dict, cwd: str, use_local_key: bool, config_dir: s
             seen.add(k)
             result.append(k)
     return result
+
+
+def mask_key(key: str) -> str:
+    if not key:
+        return "(empty)"
+    if len(key) <= 8:
+        return "****"
+    return key[:4] + "****" + key[-4:]
