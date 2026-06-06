@@ -7,7 +7,7 @@
 
 ## Expected (with skill)
 - 把 `/shorts/XY_z-12` 改写为 `watch?v=XY_z-12` 再提交
-- 若用户选了非 Gemini 模型，提示 YouTube 仅 Gemini 家族支持
+- 若用户选了非 Gemini 模型：能力预校验会因模型缺 `video` 能力而拦截（退出码 3）；此外 Agent 应提示「YouTube 仅 Gemini 家族支持」——该家族提示是 Agent 行为层职责，脚本不按家族名强制
 
 ## Red flags
 - 直接把 shorts URL 提交（上游 422）

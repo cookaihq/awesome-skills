@@ -26,7 +26,7 @@ description: Use when the user names a specific model and wants it to generate t
 
 ## CRITICAL
 
-- 创建任务**消耗积分**：提交前向用户输出请求摘要（模型、媒体清单、max_tokens、本地媒体 >20MB 的软警告），**等用户确认再调脚本**；脚本本身不二次确认
+- 创建任务**消耗积分**：提交前向用户输出请求摘要（模型、媒体清单、max_tokens、本地媒体 >20MB 的软警告），**等用户确认再调脚本**；脚本本身不二次确认（注：>20MB 软警告——Agent 应在构造摘要前自行检查本地媒体大小，例如 `os.path.getsize`；脚本运行时也会把该警告输出到 stderr，但那发生在调用之后）
 - **同参数同轮禁止二次提交**（dedup 维度按用户输入的媒体来源，不是上传后的 URL）
 - **禁止自动重试创建**；重试需先告知会再扣分并取得同意。唯一例外：401 key 链 fallback（不消耗积分）
 - 创建返回异步任务，必须轮询 `GET /v1/tasks/{id}?sync_upstream=true` 到终态（`completed`/`failed`）
