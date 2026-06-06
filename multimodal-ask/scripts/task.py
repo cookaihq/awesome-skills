@@ -7,6 +7,7 @@ from client import call_with_key_fallback, http_request
 
 
 def family_of(model: str) -> "str | None":
+    """Prefix-based heuristic; only affects the max_tokens default — the user can always override."""
     m = (model or "").lower()
     if m.startswith("claude"):
         return "claude"
@@ -106,7 +107,9 @@ def submit_llm(body: dict, keys: list, *, base_url: str, transport=None) -> tupl
 def poll_task(task_id: str, key: str, *, base_url: str, transport=None,
               interval: int = 5, timeout: int = 300, sleep=None) -> dict:
     """Poll GET /v1/tasks/{id}?sync_upstream=true until status is completed/failed.
-    Returns the terminal task json. Raises PollTimeout if it never reaches terminal."""
+    Returns the terminal task json. Raises PollTimeout if it never reaches terminal.
+    On a `failed` terminal this still returns the task dict; callers pass it to
+    `extract_text`, which raises `TaskFailed`."""
     if transport is None:
         transport = http_request
     if sleep is None:

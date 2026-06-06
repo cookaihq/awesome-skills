@@ -1,4 +1,7 @@
+import pytest
+
 import task
+from client import Resp
 
 
 def test_family_of():
@@ -31,11 +34,6 @@ def test_build_submit_body_claude_adds_default_max_tokens_and_optionals():
     assert body["top_p"] == 0.9
     assert body["stop"] == ["X"]
     assert body["reasoning"] is True
-
-
-import pytest
-
-from client import Resp
 
 
 def test_submit_llm_success_returns_id_and_key():
@@ -104,3 +102,21 @@ def test_extract_text_failed_raises():
     with pytest.raises(task.TaskFailed) as ei:
         task.extract_text(j)
     assert "content policy" in str(ei.value)
+
+
+def test_submit_llm_non_dict_json_raises_llmerror():
+    def transport(method, url, headers, body=None, timeout=60):
+        return Resp(200, [], "")  # list body, not dict
+    with pytest.raises(task.LLMError):
+        task.submit_llm({"model": "gpt-5.5", "messages": []}, ["k1"],
+                        base_url="https://api.x", transport=transport)
+
+
+def test_poll_then_extract_failed_path():
+    def transport(method, url, headers, body=None, timeout=60):
+        return Resp(200, {"status": "failed", "error": {"code": "task_failed", "message": "policy"}}, "")
+    final = task.poll_task("t", "k", base_url="https://api.x", transport=transport,
+                           interval=1, timeout=5, sleep=lambda s: None)
+    assert final["status"] == "failed"
+    with pytest.raises(task.TaskFailed):
+        task.extract_text(final)
