@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import sys
+import urllib.error
 
-from client import encode_multipart
+from client import call_with_key_fallback, encode_multipart, http_request
+from config import mask_key, resolve_api_keys
 
 
 def build_request(mode, *, base_url, file_bytes=None, filename=None, file_data=None,
@@ -28,8 +33,6 @@ def build_request(mode, *, base_url, file_bytes=None, filename=None, file_data=N
                 {"Content-Type": "application/json"}, json.dumps(payload).encode())
     raise ValueError("unknown upload mode: %r" % mode)
 
-
-from client import call_with_key_fallback, http_request
 
 ERROR_HINTS = {
     400: "请求格式错误",
@@ -74,13 +77,6 @@ def interpret_upload(resp) -> dict:
         message += " | 上游: " + server_msg
     raise UploadError(resp.status, message)
 
-
-import argparse
-import os
-import sys
-import urllib.error
-
-from config import mask_key, resolve_api_keys
 
 BASE_URL = "https://api.foxapi.cc"
 CONFIG_DIR = os.path.expanduser("~/.config/upload-for-url")

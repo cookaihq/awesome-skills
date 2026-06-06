@@ -1,6 +1,9 @@
 import json
 
+import pytest
+
 import upload
+from client import Resp
 
 BASE = "https://api.foxapi.cc"
 
@@ -14,6 +17,14 @@ def test_build_request_stream_multipart():
     assert b'filename="a.png"' in body
     assert b"DATA" in body
     assert b'name="auto_cleanup"' in body
+    assert b"true" in body
+
+
+def test_build_request_stream_auto_cleanup_false():
+    _, _, body = upload.build_request(
+        "stream", base_url=BASE, file_bytes=b"x", filename="f.bin", auto_cleanup=False
+    )
+    assert b"false" in body
 
 
 def test_build_request_base64_json():
@@ -33,11 +44,6 @@ def test_build_request_url_json_omits_optional_filename():
     assert url == BASE + "/v1/files/upload/url"
     payload = json.loads(body)
     assert payload == {"url": "https://src/v.mp4", "auto_cleanup": True}
-
-
-import pytest
-
-from client import Resp
 
 
 def test_run_upload_uses_fallback_transport():
