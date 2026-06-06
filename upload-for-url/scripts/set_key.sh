@@ -14,5 +14,9 @@ if [[ -z "${KEY:-}" ]]; then
 fi
 printf 'X_API_KEY=%s\n' "$KEY" > "$CONFIG_DIR/.env"
 chmod 600 "$CONFIG_DIR/.env"
-masked="${KEY:0:4}****${KEY: -4}"
+if [[ ${#KEY} -le 8 ]]; then
+  masked="****"
+else
+  masked="${KEY:0:4}****${KEY: -4}"
+fi
 echo "saved to $CONFIG_DIR/.env (key=$masked)"
