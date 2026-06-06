@@ -26,3 +26,31 @@ def read_key_from_dotenv(path: str) -> "str | None":
     except OSError:
         return None
     return parse_dotenv(text).get("X_API_KEY")
+
+
+import os
+
+
+def resolve_api_keys(environ: dict, cwd: str, use_local_key: bool, config_dir: str) -> list:
+    """Ordered candidate X_API_KEY list (first = highest priority), value-deduped.
+    Sources: process env -> $cwd/.env.local -> $cwd/.env -> $config_dir/.env (only
+    when use_local_key). $cwd files are read non-recursively (current dir only)."""
+    candidates = []
+    env_key = environ.get("X_API_KEY")
+    if env_key:
+        candidates.append(env_key)
+    for fname in (".env.local", ".env"):
+        k = read_key_from_dotenv(os.path.join(cwd, fname))
+        if k:
+            candidates.append(k)
+    if use_local_key:
+        k = read_key_from_dotenv(os.path.join(config_dir, ".env"))
+        if k:
+            candidates.append(k)
+    seen = set()
+    result = []
+    for k in candidates:
+        if k not in seen:
+            seen.add(k)
+            result.append(k)
+    return result

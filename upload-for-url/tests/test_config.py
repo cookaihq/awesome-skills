@@ -33,3 +33,36 @@ def test_read_key_from_dotenv_reads_x_api_key(tmp_path):
     p = tmp_path / ".env"
     p.write_text("X_API_KEY='sk-fromfile'\n", encoding="utf-8")
     assert config.read_key_from_dotenv(str(p)) == "sk-fromfile"
+
+
+def test_resolve_api_keys_precedence_env_then_dotenvlocal_then_dotenv(tmp_path):
+    (tmp_path / ".env.local").write_text("X_API_KEY=sk-local\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("X_API_KEY=sk-dotenv\n", encoding="utf-8")
+    keys = config.resolve_api_keys(
+        environ={"X_API_KEY": "sk-env"},
+        cwd=str(tmp_path),
+        use_local_key=False,
+        config_dir="/unused",
+    )
+    assert keys == ["sk-env", "sk-local", "sk-dotenv"]
+
+
+def test_resolve_api_keys_dedup_preserves_order(tmp_path):
+    (tmp_path / ".env.local").write_text("X_API_KEY=sk-env\n", encoding="utf-8")
+    keys = config.resolve_api_keys(
+        environ={"X_API_KEY": "sk-env"},
+        cwd=str(tmp_path),
+        use_local_key=False,
+        config_dir="/unused",
+    )
+    assert keys == ["sk-env"]  # duplicate value collapsed
+
+
+def test_resolve_api_keys_config_dir_only_with_flag(tmp_path):
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    (cfg / ".env").write_text("X_API_KEY=sk-persist\n", encoding="utf-8")
+    without = config.resolve_api_keys({}, str(tmp_path), use_local_key=False, config_dir=str(cfg))
+    assert without == []
+    with_flag = config.resolve_api_keys({}, str(tmp_path), use_local_key=True, config_dir=str(cfg))
+    assert with_flag == ["sk-persist"]
