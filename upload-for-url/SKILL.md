@@ -57,7 +57,7 @@ X_API_KEY='sk-xxx' python3 scripts/upload.py --file ./a.png --file-name cover.pn
 | 退出码 | 含义 |
 |---|---|
 | 0 | 成功，stdout 为 URL |
-| 1 | 上传失败（HTTP 4xx/5xx 或网络错误），stderr 有原因 |
+| 1 | 上传失败（HTTP 4xx/5xx、网络错误，或本地文件不可读），stderr 有原因 |
 | 2 | 未找到 X_API_KEY（或命令行参数错误，argparse 用法退出码也是 2） |
 
 HTTP 语义：401 鉴权失败（触发 key fallback）｜403 存储空间不足｜413 文件过大（不编造上限）｜429 限流（不自动重试）｜5xx 服务异常。
