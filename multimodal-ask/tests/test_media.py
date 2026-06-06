@@ -9,6 +9,7 @@ def test_classify_source():
     assert media.classify_source("https://www.youtube.com/watch?v=abc123") == "youtube"
     assert media.classify_source("https://youtu.be/abc123") == "youtube"
     assert media.classify_source("https://youtube.com/shorts/XY_z-12") == "youtube"
+    assert media.classify_source("https://m.youtube.com/watch?v=abc123") == "youtube"
 
 
 def test_normalize_youtube_rewrites_shorts():
@@ -18,6 +19,9 @@ def test_normalize_youtube_rewrites_shorts():
     assert media.normalize_youtube(watch) == watch
     short = "https://youtu.be/abc123"
     assert media.normalize_youtube(short) == short
+    assert media.normalize_youtube(
+        "https://www.youtube.com/shorts/XY_z-12?feature=share"
+    ) == "https://www.youtube.com/watch?v=XY_z-12"
 
 
 def test_size_warning_under_threshold_returns_none(tmp_path):
@@ -42,3 +46,5 @@ def test_size_warning_missing_file_returns_none():
 def test_capability_and_content_maps():
     assert media.CAPABILITY_BY_KIND["image"] == "vision"
     assert media.CONTENT_KEY_BY_KIND["video"] == "video_url"
+    assert set(media.CAPABILITY_BY_KIND) == {"image", "video", "audio", "file"}
+    assert set(media.CONTENT_KEY_BY_KIND) == {"image", "video", "audio", "file"}
