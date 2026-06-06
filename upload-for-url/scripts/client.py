@@ -30,3 +30,24 @@ def encode_multipart(fields: dict, file_field: str, filename: str,
     chunks.append(file_bytes + crlf)
     chunks.append(b"--" + b + b"--" + crlf)
     return "multipart/form-data; boundary=" + boundary, b"".join(chunks)
+
+
+def http_request(method: str, url: str, headers: dict,
+                 body: "bytes | None" = None, timeout: int = 60) -> Resp:
+    """Perform an HTTP request. Returns Resp(status, json, text) for any HTTP
+    status (including 4xx/5xx). Raises urllib.error.URLError only on network
+    failure (caller treats that as fatal, not a key-fallback trigger)."""
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read()
+            status = r.status
+    except urllib.error.HTTPError as e:
+        raw = e.read()
+        status = e.code
+    text = raw.decode("utf-8", "replace") if raw else ""
+    try:
+        parsed = _json.loads(text) if text else None
+    except ValueError:
+        parsed = None
+    return Resp(status, parsed, text)
