@@ -82,3 +82,61 @@ def test_main_failed_task_returns_1(monkeypatch, capsys):
     code = ask.main(["--model", "gpt-5.5", "--prompt", "hi"])
     assert code == 1
     assert "boom" in capsys.readouterr().err
+
+
+def test_main_upload_failure_returns_1(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("X_API_KEY", "sk-abcd1234efgh")
+    monkeypatch.setattr(ask, "fetch_models", _models_ok)
+
+    def _raise(path, keys, **k):
+        raise ask.UploadHelperError(413, "文件过大")
+
+    monkeypatch.setattr(ask, "upload_local_file", _raise)
+    img = tmp_path / "x.png"
+    img.write_bytes(b"PNG")
+    code = ask.main(["--model", "gemini-3.5-flash", "--prompt", "x", "--image", str(img)])
+    assert code == 1
+    assert "文件过大" in capsys.readouterr().err
+
+
+def test_main_youtube_passthrough_normalized_no_upload(monkeypatch, capsys):
+    monkeypatch.setenv("X_API_KEY", "sk-abcd1234efgh")
+    monkeypatch.setattr(ask, "fetch_models", _models_ok)
+
+    def _no_upload(*a, **k):
+        raise AssertionError("upload_local_file must NOT be called for a YouTube URL")
+
+    monkeypatch.setattr(ask, "upload_local_file", _no_upload)
+    captured = {}
+
+    def fake_submit(body, keys, **k):
+        captured["body"] = body
+        return {"id": "t"}, "k1"
+
+    monkeypatch.setattr(ask, "submit_llm", fake_submit)
+    monkeypatch.setattr(ask, "poll_task", lambda tid, key, **k: {
+        "status": "completed", "results": [{"choices": [{"message": {"content": "ok"}}]}]})
+    code = ask.main(["--model", "gemini-3.5-flash", "--prompt", "概述",
+                     "--video", "https://www.youtube.com/shorts/XY_z-12"])
+    assert code == 0
+    blocks = captured["body"]["messages"][-1]["content"]
+    assert {"type": "video_url",
+            "video_url": {"url": "https://www.youtube.com/watch?v=XY_z-12"}} in blocks
+
+
+def test_main_precheck_urlerror_proceeds(monkeypatch, capsys):
+    import urllib.error
+    monkeypatch.setenv("X_API_KEY", "sk-abcd1234efgh")
+
+    def _raise(*a, **k):
+        raise urllib.error.URLError("net down")
+
+    monkeypatch.setattr(ask, "fetch_models", _raise)
+    monkeypatch.setattr(ask, "submit_llm", lambda body, keys, **k: ({"id": "t"}, "k1"))
+    monkeypatch.setattr(ask, "poll_task", lambda tid, key, **k: {
+        "status": "completed", "results": [{"choices": [{"message": {"content": "hi"}}]}]})
+    code = ask.main(["--model", "gpt-5.5", "--prompt", "hi"])
+    out = capsys.readouterr()
+    assert code == 0
+    assert out.out.strip() == "hi"
+    assert "预校验跳过" in out.err

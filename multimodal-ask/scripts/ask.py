@@ -16,7 +16,17 @@ from upload_helper import UploadHelperError, upload_local_file
 
 BASE_URL = "https://api.foxapi.cc"
 CONFIG_DIR = os.path.expanduser("~/.config/multimodal-ask")
-WARN_BYTES = int(os.environ.get("MULTIMODAL_ASK_WARN_BYTES") or (20 * 1024 * 1024))
+def _parse_warn_bytes() -> int:
+    raw = os.environ.get("MULTIMODAL_ASK_WARN_BYTES") or ""
+    if raw:
+        try:
+            return int(raw)
+        except ValueError:
+            print("⚠ MULTIMODAL_ASK_WARN_BYTES=%r 非整数，已忽略，使用默认值 20 MB" % raw, file=sys.stderr)
+    return 20 * 1024 * 1024
+
+
+WARN_BYTES = _parse_warn_bytes()
 
 
 def parse_args(argv):
