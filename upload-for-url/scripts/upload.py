@@ -73,3 +73,74 @@ def interpret_upload(resp) -> dict:
     if server_msg:
         message += " | 上游: " + server_msg
     raise UploadError(resp.status, message)
+
+
+import argparse
+import os
+import sys
+import urllib.error
+
+from config import mask_key, resolve_api_keys
+
+BASE_URL = "https://api.foxapi.cc"
+CONFIG_DIR = os.path.expanduser("~/.config/upload-for-url")
+
+
+def parse_args(argv):
+    p = argparse.ArgumentParser(description="Upload a file to foxapi → 72h public URL")
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--file", help="local file path (multipart stream upload)")
+    src.add_argument("--base64", dest="base64_data", help="raw base64 or data URL")
+    src.add_argument("--url", help="remote URL to fetch & re-host")
+    p.add_argument("--file-name", help="override stored file name")
+    p.add_argument("--no-auto-cleanup", action="store_true",
+                   help="set auto_cleanup=false (403 instead of evicting oldest)")
+    p.add_argument("--use-local-key", action="store_true",
+                   help="also read ~/.config/upload-for-url/.env")
+    p.add_argument("--base-url", default=BASE_URL)
+    return p.parse_args(argv)
+
+
+def main(argv=None) -> int:
+    args = parse_args(argv)
+    keys = resolve_api_keys(os.environ, os.getcwd(), args.use_local_key, CONFIG_DIR)
+    if not keys:
+        print("未找到 X_API_KEY（检查进程 env / $PWD/.env.local / $PWD/.env / --use-local-key）",
+              file=sys.stderr)
+        return 2
+
+    auto_cleanup = not args.no_auto_cleanup
+    if args.file:
+        with open(args.file, "rb") as fh:
+            file_bytes = fh.read()
+        url, headers, body = build_request(
+            "stream", base_url=args.base_url, file_bytes=file_bytes,
+            filename=args.file_name or os.path.basename(args.file),
+            file_name=args.file_name, auto_cleanup=auto_cleanup)
+    elif args.base64_data:
+        url, headers, body = build_request(
+            "base64", base_url=args.base_url, file_data=args.base64_data,
+            file_name=args.file_name, auto_cleanup=auto_cleanup)
+    else:
+        url, headers, body = build_request(
+            "url", base_url=args.base_url, url=args.url,
+            file_name=args.file_name, auto_cleanup=auto_cleanup)
+
+    try:
+        resp, used = run_upload(url, headers, body, keys)
+        result = interpret_upload(resp)
+    except UploadError as e:
+        print(e.message, file=sys.stderr)
+        return 1
+    except urllib.error.URLError as e:
+        print("网络错误: %s" % e, file=sys.stderr)
+        return 1
+
+    print(result["url"])  # stdout: pure URL (parseable by callers)
+    print("✓ 上传成功 id=%s size=%s bytes | key=%s | ⚠ 该 URL 72 小时后过期，需长期保留请转存"
+          % (result.get("id"), result.get("size"), mask_key(used)), file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
