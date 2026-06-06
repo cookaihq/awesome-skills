@@ -30,4 +30,30 @@ def test_upload_local_file_error_raises(tmp_path):
     with pytest.raises(upload_helper.UploadHelperError) as ei:
         upload_helper.upload_local_file(str(f), ["k1"], base_url="https://api.x", transport=transport)
     assert ei.value.status == 413
-    assert "文件过大" in ei.value.message
+    assert "请压缩" in ei.value.message   # hint from _HINTS[413], not just the upstream echo
+    assert "上游" in ei.value.message     # upstream message section present
+
+
+def test_upload_local_file_200_without_url_raises(tmp_path):
+    f = tmp_path / "x.bin"
+    f.write_bytes(b"x")
+
+    def transport(method, url, headers, body=None, timeout=60):
+        return Resp(200, {"id": "f1"}, "")  # 200 but no url field
+
+    with pytest.raises(upload_helper.UploadHelperError) as ei:
+        upload_helper.upload_local_file(str(f), ["k1"], base_url="https://api.x", transport=transport)
+    assert ei.value.status == 200
+    assert "缺少 url" in ei.value.message
+
+
+def test_upload_local_file_urlerror_propagates(tmp_path):
+    import urllib.error
+    f = tmp_path / "x.bin"
+    f.write_bytes(b"x")
+
+    def transport(method, url, headers, body=None, timeout=60):
+        raise urllib.error.URLError("boom")
+
+    with pytest.raises(urllib.error.URLError):
+        upload_helper.upload_local_file(str(f), ["k1"], base_url="https://api.x", transport=transport)

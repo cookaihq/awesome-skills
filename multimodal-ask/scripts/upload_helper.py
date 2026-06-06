@@ -35,6 +35,8 @@ def upload_local_file(path: str, keys: list, *, base_url: str = "https://api.fox
     resp, _ = call_with_key_fallback(keys, attempt)
     if resp.status == 200 and isinstance(resp.json, dict) and resp.json.get("url"):
         return resp.json["url"]
+    if resp.status == 200:
+        raise UploadHelperError(200, "[HTTP 200] 上传响应缺少 url 字段: %s" % (resp.text or "")[:200])
     hint = _HINTS.get(resp.status, "未预期的响应")
     server = ""
     if isinstance(resp.json, dict) and isinstance(resp.json.get("error"), dict):
