@@ -5,3 +5,6 @@
 .env.*.local
 .pytest_cache/
 CLAUDE.md
+
+# xhs-downloader vendored upstream clone (auto-provisioned on first use) + its venv/downloads
+xhs-downloader/vendor/

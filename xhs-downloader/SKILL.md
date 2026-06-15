@@ -16,11 +16,19 @@ description: Use when the user wants to download Xiaohongshu / 小红书 / RedNo
 - ✅ 下载单条/多条作品链接的媒体；只要直链元数据（`--metadata-only`）。
 - ❌ 账号批量采集（发布/收藏/点赞/搜索列表）；生成图片；视频生成。
 
-## Setup（首次）
+## Setup（首次自动，无需手动）
 
-依赖本机存在 XHS-Downloader clone 及其 venv：
-- clone 位置：默认探测 `forked-repos/XHS-Downloader`，或设 `XHS_DOWNLOADER_PATH`。
-- venv：`cd <clone> && uv sync --no-dev`；扫码登录需把 playwright 装进该 venv：`VIRTUAL_ENV=<clone>/.venv uv pip install playwright && <clone>/.venv/bin/python -m playwright install chromium`。
+**首次运行会自动下载并建好环境**——无需手动 clone。定位顺序：
+1. `XHS_DOWNLOADER_PATH`（显式指定的 clone 根）
+2. dev clone `forked-repos/XHS-Downloader`（本仓开发场景）
+3. 托管 clone `vendor/XHS-Downloader`（skill 自己管，已 gitignore）
+4. 都没有 → **自动 `git clone` + `uv sync --no-dev`** 到 `vendor/XHS-Downloader`（带进度提示）
+
+前置：本机需有 `git` 和 `uv`。playwright + chromium **不在首次安装**，仅在首次需要扫码登录时按需装入该 venv（普通下载不下 chromium）。`--no-auto-setup` 可关闭自动下载（改为仅报错）。
+
+### 更新上游代码
+
+每次运行会做**短超时（5s）、24h 节流**的只读更新检查；若上游有新版本，stderr 会打印一行 `上游有更新（本地 X → 远端 Y）`。**脚本不会自动更新**——看到该提示应**询问用户**是否更新，用户同意后用 `--update` 重新运行（`git pull --ff-only` + `uv sync`）。`--no-update-check` 跳过检查。
 
 ## Usage
 
@@ -36,6 +44,9 @@ python3 scripts/xhs_dl.py --url "<link>" --metadata-only
 
 # 强制先扫码登录再下载（高清视频）
 python3 scripts/xhs_dl.py --url "<link>" --login
+
+# 更新上游代码后再下载（用户同意更新时）
+python3 scripts/xhs_dl.py --url "<link>" --update
 ```
 
 **输出**：stdout 一行 JSON 数组（每个作品含 `作品标题/作品类型/作者昵称/作品链接/下载地址/动图地址/saved_dir`）；stderr 人类摘要。退出码 0 成功 / 3 提取为空 / 1 失败 / 2 参数错误。

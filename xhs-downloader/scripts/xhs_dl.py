@@ -9,13 +9,16 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _config  # noqa: E402
+import _provision  # noqa: E402
 
 HOME_CONFIG = Path.home() / ".config" / "xhs-downloader" / ".env"
 SCRIPTS_DIR = Path(__file__).resolve().parent
+SKILL_ROOT = SCRIPTS_DIR.parent
 
 
 def _candidate_clone_paths() -> list:
@@ -27,7 +30,12 @@ def _candidate_clone_paths() -> list:
     return cands
 
 
-def resolve_clone(use_local_key: bool) -> Path:
+def resolve_clone(use_local_key: bool, auto_setup: bool) -> Path:
+    """Locate the XHS-Downloader clone, auto-provisioning into vendor/ on first use.
+
+    Order: XHS_DOWNLOADER_PATH > dev clone (forked-repos) > managed vendor/ >
+    (auto) clone into vendor/.
+    """
     home = HOME_CONFIG if use_local_key else None
     explicit = _config.read_layered("XHS_DOWNLOADER_PATH", home_config=home)
     if explicit:
@@ -38,10 +46,18 @@ def resolve_clone(use_local_key: bool) -> Path:
     for c in _candidate_clone_paths():
         if (c / "source").is_dir():
             return c
-    sys.exit(
-        "[xhs-downloader] 未找到 XHS-Downloader clone。请 git clone 到 "
-        "forked-repos/XHS-Downloader，或设置环境变量 XHS_DOWNLOADER_PATH 指向 clone 根。"
-    )
+    vendor = _provision.vendor_dir(SKILL_ROOT)
+    if (vendor / "source").is_dir():
+        return vendor
+    if not auto_setup:
+        sys.exit(
+            "[xhs-downloader] 未找到 XHS-Downloader clone，且已用 --no-auto-setup 关闭自动下载。"
+            f"请 git clone 到 {vendor}，或设置 XHS_DOWNLOADER_PATH 指向 clone 根。"
+        )
+    _provision.provision(vendor)
+    if not (vendor / "source").is_dir():
+        sys.exit(f"[xhs-downloader] 自动下载后仍未在 {vendor} 找到 source/ 目录")
+    return vendor
 
 
 def resolve_venv_python(clone: Path) -> Path:
@@ -101,7 +117,30 @@ def run_extract(venv_py: Path, clone: Path, args, cookie: str | None) -> int:
     return proc.returncode
 
 
-def do_login(venv_py: Path) -> str | None:
+def maybe_update_check(clone: Path, enabled: bool) -> None:
+    """Throttled, read-only update check. Prints a one-line notice if behind; never pulls."""
+    if not enabled:
+        return
+    stamp = _provision.stamp_path(SKILL_ROOT)
+    if not _provision.should_check(stamp, now=time.time()):
+        return
+    remote = _provision.fetch_remote_head(clone)
+    _provision.write_stamp(stamp, now=time.time())
+    if not remote:
+        return  # offline / slow / not a git clone -> silently skip
+    local = _provision.local_head(clone)
+    if local and remote and local != remote:
+        print(
+            f"[xhs-downloader] 上游有更新（本地 {local[:7]} → 远端 {remote[:7]}）。"
+            "如需更新，加 --update 重新运行。",
+            file=sys.stderr,
+        )
+
+
+def do_login(venv_py: Path, clone: Path) -> str | None:
+    if not _provision.ensure_playwright(clone):
+        print("[xhs-downloader] playwright/chromium 未就绪，无法扫码登录。", file=sys.stderr)
+        return None
     print("[xhs-downloader] 正在打开浏览器，请扫码登录……", file=sys.stderr)
     proc = subprocess.run(
         [str(venv_py), str(SCRIPTS_DIR / "login_cookie.py")],
@@ -128,17 +167,29 @@ def main() -> int:
     p.add_argument("--login", action="store_true", help="先扫码登录再下载")
     p.add_argument("--use-local-key", action="store_true",
                    help="允许从 ~/.config 读取 XHS_DOWNLOADER_PATH")
+    p.add_argument("--update", action="store_true",
+                   help="运行前 git pull --ff-only 更新上游代码并重新 uv sync")
+    p.add_argument("--no-update-check", action="store_true",
+                   help="跳过上游更新检查")
+    p.add_argument("--no-auto-setup", action="store_true",
+                   help="找不到 clone 时不自动下载，仅报错")
     args = p.parse_args()
 
     if args.output_dir is None:
         args.output_dir = _config.read_layered("XHS_OUTPUT_DIR") or "./xhs-downloads"
 
-    clone = resolve_clone(args.use_local_key)
+    clone = resolve_clone(args.use_local_key, auto_setup=not args.no_auto_setup)
+
+    if args.update:
+        _provision.update_repo(clone)
+    else:
+        maybe_update_check(clone, enabled=not args.no_update_check)
+
     venv_py = resolve_venv_python(clone)
     cookie = read_cookie()
 
     if args.login and not cookie:
-        cookie = do_login(venv_py)
+        cookie = do_login(venv_py, clone)
         if cookie:
             persist_cookie(cookie)
 
@@ -147,7 +198,7 @@ def main() -> int:
     # Empty result without a cookie -> offer login + retry once.
     if code == 3 and not args.login:
         print("[xhs-downloader] 提取为空，尝试扫码登录后重试……", file=sys.stderr)
-        new_cookie = do_login(venv_py)
+        new_cookie = do_login(venv_py, clone)
         if new_cookie:
             persist_cookie(new_cookie)
             code = run_extract(venv_py, clone, args, new_cookie)
