@@ -28,7 +28,14 @@ description: Use when the user wants to download Xiaohongshu / 小红书 / RedNo
 
 ### 更新上游代码
 
-每次运行会做**短超时（5s）、24h 节流**的只读更新检查；若上游有新版本，stderr 会打印一行 `上游有更新（本地 X → 远端 Y）`。**脚本不会自动更新**——看到该提示应**询问用户**是否更新，用户同意后用 `--update` 重新运行（`git pull --ff-only` + `uv sync`）。`--no-update-check` 跳过检查。
+运行前会做**短超时（5s）、24h 节流**的上游更新检查。行为按 clone 归属分两类：
+
+- **skill 自管的 `vendor/` clone（终端用户场景）**：发现落后时**自动更新**——`git pull --ff-only` + `uv sync`，随后在 venv 里跑一次**离线冒烟自检**（`smoke_check.py`，introspect `source.XHS` 的构造/`extract` 调用契约，不联网不下载）。自检通过则保留新版（stderr 打印「上游已更新…自检通过」）；自检失败说明**使用方式变了**，自动 `git reset --hard` 回滚到旧 commit 并重新 `uv sync`，**本次仍用旧版下载**（stderr 打印「自检失败，回滚…」）。整个更新过程全程容错，绝不会因更新失败而中断本次下载。
+- **开发 clone（`forked-repos/`）或用户用 `XHS_DOWNLOADER_PATH` 指定的 clone**：这些 clone 不归 skill 所有，**绝不自动修改**（自动 `reset --hard` 会清掉未提交的工作）。仅打印 `上游有更新（本地 X → 远端 Y）` 提示；`--update` 时执行**非破坏性**的 `git pull --ff-only`。
+
+`--update` 立即触发更新（vendor clone 走「pull + 冒烟 + 回滚」，dev/用户 clone 走 ff-only），绕过 24h 节流。`--no-update-check` 跳过全部检查/自动更新。
+
+> 冒烟自检查什么：`from source import XHS` 可导入且为 async context manager；`XHS.__init__` 仍**逐个**保留我们依赖的具名参数（上游有 `**kwargs`，改名会被静默吞掉，故必须查具名参数）；`extract` 是协程且签名能接受 `(url, download, index)`。任一项不满足即判定「使用方式已变」并回滚。
 
 ## Usage
 
@@ -45,7 +52,7 @@ python3 scripts/xhs_dl.py --url "<link>" --metadata-only
 # 强制先扫码登录再下载（高清视频）
 python3 scripts/xhs_dl.py --url "<link>" --login
 
-# 更新上游代码后再下载（用户同意更新时）
+# 强制立即更新上游再下载（自管 vendor clone 平时已自动更新，一般无需手动）
 python3 scripts/xhs_dl.py --url "<link>" --update
 ```
 

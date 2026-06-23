@@ -37,3 +37,26 @@ def test_write_and_read_stamp_roundtrip(tmp_path):
     assert stamp.is_file()
     # written value makes a subsequent recent-check skip
     assert _provision.should_check(stamp, now=12345.0 + 10, interval=3600) is False
+
+
+# ---- auto-update gating: destructive auto-update only on the managed vendor clone ----
+
+def test_managed_clone_is_the_vendor_dir(tmp_path):
+    skill_root = tmp_path / "skill"
+    vendor = _provision.vendor_dir(skill_root)
+    assert _provision.is_managed_clone(vendor, skill_root) is True
+
+
+def test_dev_or_user_clone_is_not_managed(tmp_path):
+    skill_root = tmp_path / "skill"
+    dev_clone = tmp_path / "forked-repos" / "XHS-Downloader"
+    user_clone = tmp_path / "elsewhere" / "XHS-Downloader"
+    assert _provision.is_managed_clone(dev_clone, skill_root) is False
+    assert _provision.is_managed_clone(user_clone, skill_root) is False
+
+
+def test_managed_clone_matches_regardless_of_path_normalization(tmp_path):
+    skill_root = tmp_path / "skill"
+    vendor = _provision.vendor_dir(skill_root)
+    messy = vendor.parent / "." / "XHS-Downloader"
+    assert _provision.is_managed_clone(messy, skill_root) is True

@@ -118,7 +118,10 @@ def run_extract(venv_py: Path, clone: Path, args, cookie: str | None) -> int:
 
 
 def maybe_update_check(clone: Path, enabled: bool) -> None:
-    """Throttled, read-only update check. Prints a one-line notice if behind; never pulls."""
+    """Throttled, read-only update check. Prints a one-line notice if behind; never pulls.
+
+    Used for dev/user clones we don't own — we notify but never modify their git state.
+    """
     if not enabled:
         return
     stamp = _provision.stamp_path(SKILL_ROOT)
@@ -135,6 +138,39 @@ def maybe_update_check(clone: Path, enabled: bool) -> None:
             "如需更新，加 --update 重新运行。",
             file=sys.stderr,
         )
+
+
+def maybe_update(clone: Path, venv_py: Path, *, managed: bool, forced: bool, check_enabled: bool) -> None:
+    """Keep upstream current before downloading.
+
+    - managed vendor clone: throttled (24h) auto-pull + offline smoke check + rollback
+      on incompatibility; `--update` forces it now. Destructive reset is safe here
+      because the skill owns this clone.
+    - dev/user clone: never auto-modify. `--update` does a non-destructive ff-only pull;
+      otherwise just print a throttled "上游有更新" notice.
+    """
+    if not managed:
+        if forced:
+            _provision.update_repo(clone)
+        else:
+            maybe_update_check(clone, enabled=check_enabled)
+        return
+
+    if not forced:
+        if not check_enabled:
+            return
+        stamp = _provision.stamp_path(SKILL_ROOT)
+        if not _provision.should_check(stamp, now=time.time()):
+            return
+        remote = _provision.fetch_remote_head(clone)
+        _provision.write_stamp(stamp, now=time.time())
+        if not remote:
+            return  # offline / slow -> skip silently
+        local = _provision.local_head(clone)
+        if not (local and remote and local != remote):
+            return  # already up to date
+
+    _provision.auto_update_with_rollback(clone, venv_py, SCRIPTS_DIR)
 
 
 def do_login(venv_py: Path, clone: Path) -> str | None:
@@ -168,9 +204,9 @@ def main() -> int:
     p.add_argument("--use-local-key", action="store_true",
                    help="允许从 ~/.config 读取 XHS_DOWNLOADER_PATH")
     p.add_argument("--update", action="store_true",
-                   help="运行前 git pull --ff-only 更新上游代码并重新 uv sync")
+                   help="立即更新上游：vendor clone 走 pull+冒烟自检+失败回滚；dev/用户 clone 走 ff-only")
     p.add_argument("--no-update-check", action="store_true",
-                   help="跳过上游更新检查")
+                   help="跳过上游更新检查/自动更新")
     p.add_argument("--no-auto-setup", action="store_true",
                    help="找不到 clone 时不自动下载，仅报错")
     args = p.parse_args()
@@ -179,13 +215,16 @@ def main() -> int:
         args.output_dir = _config.read_layered("XHS_OUTPUT_DIR") or "./xhs-downloads"
 
     clone = resolve_clone(args.use_local_key, auto_setup=not args.no_auto_setup)
-
-    if args.update:
-        _provision.update_repo(clone)
-    else:
-        maybe_update_check(clone, enabled=not args.no_update_check)
-
     venv_py = resolve_venv_python(clone)
+
+    maybe_update(
+        clone,
+        venv_py,
+        managed=_provision.is_managed_clone(clone, SKILL_ROOT),
+        forced=args.update,
+        check_enabled=not args.no_update_check,
+    )
+
     cookie = read_cookie()
 
     if args.login and not cookie:
