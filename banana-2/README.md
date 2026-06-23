@@ -1,6 +1,6 @@
 # Banana 2
 
-通过 [foxapi.cc](https://foxapi.cc) 的 **Nano Banana 2**（模型 `gemini-3.1-flash-image-preview`）接口，让 AI Agent 自动调用、生成/编辑图片并保存到当前工作区。
+通过 [aihubmax.com](https://aihubmax.com) 的 **Nano Banana 2**（模型 `gemini-3.1-flash-image-preview`）接口，让 AI Agent 自动调用、生成/编辑图片并保存到当前工作区。
 
 支持文生图、图生图、图像编辑；用**宽高比**（15 种，含 `match_input_image`）+ **画质档**（`512`/`0.5K`/`1K`/`2K`/`4K`）描述尺寸；可选联网搜索（`google_search`）与图像搜索（`image_search`）辅助生成。任务完成后图片自动下载到工作区根目录，文件名按 `时间戳 + prompt 标签` 自动命名。
 
@@ -29,7 +29,7 @@
 依赖：
 
 - macOS / Linux shell（`bash`、`python3`、`curl`、`grep`、`sed`）
-- 互联网，可访问 `api.foxapi.cc` 与图片 URL host
+- 互联网，可访问 `api.aihubmax.com` 与图片 URL host
 
 ## Installation
 
@@ -71,7 +71,7 @@ echo 'X_API_KEY=sk-xxx' >> .env
 
 Agent 自动识别意图 → 调用脚本 → 轮询任务 → 下载到 `./20260528-153934-未来感无线耳.png`。
 
-获取 API Key：去 [foxapi.cc](https://foxapi.cc) 注册账号，控制台生成。该 key 与 `image-2` 通用（同一个 foxapi.cc 账号）。
+获取 API Key：去 [aihubmax.com](https://aihubmax.com) 注册账号，控制台生成。该 key 与 `image-2` 通用（同一个 aihubmax.com 账号）。
 
 ## Configuration
 
@@ -152,17 +152,17 @@ X_API_KEY=sk-xxx ./scripts/create_task.sh \
 
 ## Security / Privacy
 
-- **联网**：是。调用 `https://api.foxapi.cc/v1/*`，从返回的图片 URL host 下载图片
+- **联网**：是。调用 `https://api.aihubmax.com/v1/*`，从返回的图片 URL host 下载图片
 - **API Key**：必需。本 skill **不会**把完整 key 写入仓库、日志或回显；终端输出始终掩码为 `head4****tail4`，完整值仅出现在 `Authorization` HTTP header 中
 - **本地文件读取**：自动读取 `$PWD/.env.local` 与 `$PWD/.env`，但**不向上递归**（不读父目录、git root、`$HOME` 的 dotenv）；持久化 key 在 `~/.config/banana-2/.env`，**必须显式 `--use-local-key`** 才启用
 - **本地文件写入**：默认在 `$PWD` 创建图片文件；可通过 `--no-save` 关闭
-- **第三方服务**：调用前请自行评估 [foxapi.cc](https://foxapi.cc) 的可信度与合规要求
-- **图片有效期**：foxapi.cc 返回的 URL **24 小时**后失效，长期保留请下载到本地（默认行为已下载）
-- **计费**：每次成功创建任务（HTTP 200）都会消耗 foxapi.cc 积分；HTTP 401 不计费
+- **第三方服务**：调用前请自行评估 [aihubmax.com](https://aihubmax.com) 的可信度与合规要求
+- **图片有效期**：aihubmax.com 返回的 URL **24 小时**后失效，长期保留请下载到本地（默认行为已下载）
+- **计费**：每次成功创建任务（HTTP 200）都会消耗 aihubmax.com 积分；HTTP 401 不计费
 
 ## Cost
 
-每次生成的积分消耗以 foxapi.cc 计费规则为准（可在任务查询响应的 `usage.credits_reserved` 看到本次预扣额度）。
+每次生成的积分消耗以 aihubmax.com 计费规则为准（可在任务查询响应的 `usage.credits_reserved` 看到本次预扣额度）。
 
 提高成本的因素：
 
@@ -183,7 +183,7 @@ banana-2/
 │   ├── create_task.sh    # 主脚本：创建任务 + 轮询 + 自动下载
 │   └── set_key.sh        # 持久化 key 到 ~/.config/banana-2/.env
 ├── references/
-│   └── api-guide.md      # foxapi.cc Nano Banana 2 API 完整规范
+│   └── api-guide.md      # aihubmax.com Nano Banana 2 API 完整规范
 └── tests/
     ├── README.md         # 测试场景索引
     └── scenario-*.md     # 7 个 pressure 测试场景文档
@@ -194,10 +194,10 @@ banana-2/
 | 现象 | 处理 |
 |---|---|
 | `Error: no API key found in any of:` | 在 `.env` 加 `X_API_KEY=...` 或 `export X_API_KEY=sk-xxx` |
-| 所有 key 都返回 HTTP 401 | 去 [foxapi.cc](https://foxapi.cc) 控制台确认 key 未过期、未禁用、有调用 image API 的权限 |
-| HTTP 402 `insufficient_quota` | 余额不足，去 foxapi.cc 充值 |
+| 所有 key 都返回 HTTP 401 | 去 [aihubmax.com](https://aihubmax.com) 控制台确认 key 未过期、未禁用、有调用 image API 的权限 |
+| HTTP 402 `insufficient_quota` | 余额不足，去 aihubmax.com 充值 |
 | HTTP 422 `validation_error` | 检查 `aspect_ratio`（15 种）、`resolution`（只接受 `512`/`0.5K`/`1K`/`2K`/`4K` 画质档，不是像素）、`output_format`（`jpg`/`png`/`webp`） |
-| 长时间停留 `processing` 直到超时 | 用返回的 task_id 手动查询：`curl https://api.foxapi.cc/v1/tasks/{task_id}?sync_upstream=true -H "Authorization: Bearer $X_API_KEY"` |
+| 长时间停留 `processing` 直到超时 | 用返回的 task_id 手动查询：`curl https://api.aihubmax.com/v1/tasks/{task_id}?sync_upstream=true -H "Authorization: Bearer $X_API_KEY"` |
 | 报错 `status=completed but results empty` 后继续轮询 | 这是脚本对上游竞态的保护，无需处理；几秒内会拿到 `results` |
 
 ## License
@@ -206,5 +206,5 @@ MIT，见仓库根 [LICENSE](../LICENSE)。
 
 ## Acknowledgements
 
-- 图片生成接口：[foxapi.cc](https://foxapi.cc)
+- 图片生成接口：[aihubmax.com](https://aihubmax.com)
 - Skill 结构遵循 [agentskills.io](https://agentskills.io) 开放标准

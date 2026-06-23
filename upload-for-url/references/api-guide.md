@@ -1,6 +1,6 @@
 # upload-for-url — API 参考
 
-Server: `https://api.foxapi.cc` ｜ Auth: `Authorization: Bearer <X_API_KEY>`（`sk-...`）
+Server: `https://api.aihubmax.com` ｜ Auth: `Authorization: Bearer <X_API_KEY>`（`sk-...`）
 
 3 个上传端点，**统一返回一个 72 小时后过期的公网 URL**；存储空间不足时默认自动淘汰最早上传的文件（`auto_cleanup=true`），设 `false` 则空间不足直接 403。
 

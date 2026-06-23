@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Creates a Nano Banana 2 (gemini-3.1-flash-image-preview) task via foxapi.cc
+# Creates a Nano Banana 2 (gemini-3.1-flash-image-preview) task via aihubmax.com
 # and polls until terminal status.
 #
 # Key resolution chain (high -> low):
@@ -14,7 +14,7 @@ set -euo pipefail
 # the chain. 401 does not consume credits. Other errors (402/422/429/5xx,
 # network errors) stop the chain immediately.
 
-BASE_URL="${FOXAPI_BASE_URL:-https://api.foxapi.cc}"
+BASE_URL="${AIHUBMAX_BASE_URL:-https://api.aihubmax.com}"
 CREATE_ENDPOINT="/v1/images/generations"
 QUERY_ENDPOINT_PREFIX="/v1/tasks"
 
@@ -74,7 +74,7 @@ Output options:
 Runtime options:
   --poll-interval   Seconds between polls (default 8)
   --max-attempts    Max poll attempts (default 90)
-  --base-url        Override API base URL (default https://api.foxapi.cc)
+  --base-url        Override API base URL (default https://api.aihubmax.com)
   --use-local-key   Also try ~/.config/banana-2/.env after env / $PWD .env files
   -h, --help        Show help
 

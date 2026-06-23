@@ -7,7 +7,7 @@ from collections import namedtuple
 
 DEFAULT_BOUNDARY = "----foxapiUploadBoundaryXyZ"
 
-# api.foxapi.cc sits behind Cloudflare, which rejects urllib's default
+# api.aihubmax.com sits behind Cloudflare, which rejects urllib's default
 # "Python-urllib/x.y" User-Agent with HTTP 403 / "error code: 1010" (banned
 # browser signature). Sending a browser-like UA clears that gate. Callers may
 # override by passing their own User-Agent header.

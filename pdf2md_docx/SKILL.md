@@ -1,13 +1,13 @@
 ---
 name: pdf2md_docx
-description: Use when the user wants to convert a PDF into Markdown / LaTeX / DOCX — phrases like "把这个 PDF 转成 markdown"、"PDF 转 md/docx"、"提取 PDF 里的公式和表格"、"PDF 转可编辑文档"、"pdf2md"、"doc2x". Wraps foxapi.cc Doc2X V3; handles formula recognition and cross-page table merging, returns a ZIP that is auto-extracted into a date-time-prefixed folder. Do NOT use for plain text extraction of a single short page (read it directly), image generation, OCR of photos, or non-PDF documents.
+description: Use when the user wants to convert a PDF into Markdown / LaTeX / DOCX — phrases like "把这个 PDF 转成 markdown"、"PDF 转 md/docx"、"提取 PDF 里的公式和表格"、"PDF 转可编辑文档"、"pdf2md"、"doc2x". Wraps aihubmax.com Doc2X V3; handles formula recognition and cross-page table merging, returns a ZIP that is auto-extracted into a date-time-prefixed folder. Do NOT use for plain text extraction of a single short page (read it directly), image generation, OCR of photos, or non-PDF documents.
 ---
 
 # pdf2md_docx
 
 ## Overview
 
-通过 [foxapi.cc](https://docs.foxapi.cc/pages/zh/api-manual/document-processing/doc2x-v3) 的 `doc2x-v3` 接口把 **PDF 转换为 Markdown / LaTeX / DOCX**，支持公式识别与跨页表格合并。这是**异步任务**：创建后必须轮询查询直到终态（`completed` / `failed`）。结果是一个 **ZIP 压缩包**（含转换文档 + 图片资源），脚本会自动下载并**解压到带日期时间前缀的文件夹**。鉴权 `Authorization: Bearer <key>`。
+通过 [aihubmax.com](https://docs.aihubmax.com/pages/zh/api-manual/document-processing/doc2x-v3) 的 `doc2x-v3` 接口把 **PDF 转换为 Markdown / LaTeX / DOCX**，支持公式识别与跨页表格合并。这是**异步任务**：创建后必须轮询查询直到终态（`completed` / `failed`）。结果是一个 **ZIP 压缩包**（含转换文档 + 图片资源），脚本会自动下载并**解压到带日期时间前缀的文件夹**。鉴权 `Authorization: Bearer <key>`。
 
 完整字段、错误码、响应结构见 [references/api-guide.md](references/api-guide.md)。
 

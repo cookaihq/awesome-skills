@@ -1,20 +1,20 @@
 ---
 name: upload-for-url
-description: Use when the user wants to turn a LOCAL file (image/audio/video/document) into a public URL that an AI API can consume — phrases like "把这个文件传上去拿个链接"、"上传文件换个 URL"、"这个视频/音频/PDF 传成在线地址给模型用". Also re-hosts a remote URL into a foxapi 72h short link. Returns a public URL valid for 72 hours. Do NOT use for HTML page preview (that's preview-share), production deploys, npm publish, or git push.
+description: Use when the user wants to turn a LOCAL file (image/audio/video/document) into a public URL that an AI API can consume — phrases like "把这个文件传上去拿个链接"、"上传文件换个 URL"、"这个视频/音频/PDF 传成在线地址给模型用". Also re-hosts a remote URL into a aihubmax 72h short link. Returns a public URL valid for 72 hours. Do NOT use for HTML page preview (that's preview-share), production deploys, npm publish, or git push.
 ---
 
 # upload-for-url
 
 ## Overview
 
-通过 [foxapi.cc](https://docs.foxapi.cc/pages/zh/api-manual/file-management/upload-stream) 的文件上传接口，把本地文件 / 远程 URL / base64 托管成一个**公网可访问的 URL**，常用于喂给只接受 URL 的 AI 接口（如 multimodal-ask 的 `image_url`/`video_url`/`audio_url`/`file_url`）。鉴权 `Authorization: Bearer <key>`。
+通过 [aihubmax.com](https://docs.aihubmax.com/pages/zh/api-manual/file-management/upload-stream) 的文件上传接口，把本地文件 / 远程 URL / base64 托管成一个**公网可访问的 URL**，常用于喂给只接受 URL 的 AI 接口（如 multimodal-ask 的 `image_url`/`video_url`/`audio_url`/`file_url`）。鉴权 `Authorization: Bearer <key>`。
 
 完整字段、错误码见 [references/api-guide.md](references/api-guide.md)。
 
 ## When to Use
 
 - 把**本地文件**（图/音/视频/文档）变成公网 URL，喂给只收 URL 的 API
-- 把一个远程 URL **转存**成 foxapi 72h 短链
+- 把一个远程 URL **转存**成 aihubmax 72h 短链
 
 ## When NOT to Use
 

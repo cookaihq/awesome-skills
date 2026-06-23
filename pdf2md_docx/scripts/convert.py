@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Doc2X V3 PDF conversion (md / tex / docx) via foxapi.cc.
+"""Doc2X V3 PDF conversion (md / tex / docx) via aihubmax.com.
 
 Pipeline: local PDF -> (count pages) -> (upload for a public URL) ->
 POST /v1/run/generations -> poll /v1/tasks/{id} -> download result ZIP ->
@@ -31,7 +31,7 @@ from config import mask_key, resolve_api_keys
 from upload_helper import UploadHelperError, upload_local_file
 
 MODEL = "doc2x-v3"
-DEFAULT_BASE_URL = "https://api.foxapi.cc"
+DEFAULT_BASE_URL = "https://api.aihubmax.com"
 CONFIG_DIR = os.path.expanduser("~/.config/pdf2md_docx")
 
 CONVERT_MODES = ("md", "tex", "docx")

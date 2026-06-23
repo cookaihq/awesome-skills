@@ -5,7 +5,7 @@ import pytest
 import upload
 from client import Resp
 
-BASE = "https://api.foxapi.cc"
+BASE = "https://api.aihubmax.com"
 
 
 def test_build_request_stream_multipart():

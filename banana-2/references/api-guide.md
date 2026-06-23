@@ -1,14 +1,14 @@
-# Nano Banana 2 API Guide (foxapi.cc)
+# Nano Banana 2 API Guide (aihubmax.com)
 
 Model: **Nano Banana 2** (`gemini-3.1-flash-image-preview`)
 
 Provider docs:
-- Create: https://docs.foxapi.cc/pages/zh/api-manual/image-series/nanobanana/gemini-3.1-flash-image-preview
-- Query: https://docs.foxapi.cc/pages/zh/api-manual/task-management/get-task-detail
+- Create: https://docs.aihubmax.com/pages/zh/api-manual/image-series/nanobanana/gemini-3.1-flash-image-preview
+- Query: https://docs.aihubmax.com/pages/zh/api-manual/task-management/get-task-detail
 
 ## Base URL
 
-- `https://api.foxapi.cc`
+- `https://api.aihubmax.com`
 
 ## Authentication
 
@@ -61,7 +61,7 @@ Provider docs:
 
 ```bash
 # text-to-image (1K)
-curl -X POST 'https://api.foxapi.cc/v1/images/generations' \
+curl -X POST 'https://api.aihubmax.com/v1/images/generations' \
   -H "Authorization: Bearer $X_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
@@ -72,7 +72,7 @@ curl -X POST 'https://api.foxapi.cc/v1/images/generations' \
   }'
 
 # image editing with image search (2K, match input aspect ratio)
-curl -X POST 'https://api.foxapi.cc/v1/images/generations' \
+curl -X POST 'https://api.aihubmax.com/v1/images/generations' \
   -H "Authorization: Bearer $X_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
@@ -114,7 +114,7 @@ Status enum at creation: `pending` / `processing` / `completed` / `failed` (typi
 ### Request Example
 
 ```bash
-curl -X GET "https://api.foxapi.cc/v1/tasks/${TASK_ID}?sync_upstream=true" \
+curl -X GET "https://api.aihubmax.com/v1/tasks/${TASK_ID}?sync_upstream=true" \
   -H "Authorization: Bearer $X_API_KEY"
 ```
 

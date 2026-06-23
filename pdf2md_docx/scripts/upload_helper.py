@@ -17,9 +17,9 @@ class UploadHelperError(Exception):
         self.message = message
 
 
-def upload_local_file(path: str, keys: list, *, base_url: str = "https://api.foxapi.cc",
+def upload_local_file(path: str, keys: list, *, base_url: str = "https://api.aihubmax.com",
                       transport=None) -> str:
-    """Upload a local file via the foxapi stream endpoint; return the hosted URL.
+    """Upload a local file via the aihubmax stream endpoint; return the hosted URL.
     Raises UploadHelperError on HTTP failure; lets urllib URLError propagate."""
     if transport is None:
         transport = http_request

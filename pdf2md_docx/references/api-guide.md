@@ -1,11 +1,11 @@
 # Doc2X V3 API Guide
 
-来源：foxapi.cc 统一网关，`openapi/zh/doc2x-v3.json`。本文件是 skill 自带的离线速查；权威定义以该 OpenAPI 为准。
+来源：aihubmax.com 统一网关，`openapi/zh/doc2x-v3.json`。本文件是 skill 自带的离线速查；权威定义以该 OpenAPI 为准。
 
 ## 接口
 
-- **创建任务**：`POST https://api.foxapi.cc/v1/run/generations`
-- **查询任务**：`GET https://api.foxapi.cc/v1/tasks/{task_id}?sync_upstream=true`
+- **创建任务**：`POST https://api.aihubmax.com/v1/run/generations`
+- **查询任务**：`GET https://api.aihubmax.com/v1/tasks/{task_id}?sync_upstream=true`
 - **鉴权**：`Authorization: Bearer <X_API_KEY>`
 
 异步模型：创建返回 `id`（task_id），随后轮询查询接口直到 `status` 为 `completed` 或 `failed`。
@@ -76,7 +76,7 @@
 | HTTP | type | 含义 | 处理 |
 |------|------|------|------|
 | 400 | `invalid_request_error` | 请求格式错误 | 修正请求体 |
-| 401 | `authentication_error` | API 密钥无效 | 触发 key 链 fallback；都失败则去 foxapi.cc 检查 key |
+| 401 | `authentication_error` | API 密钥无效 | 触发 key 链 fallback；都失败则去 aihubmax.com 检查 key |
 | 402 | `insufficient_quota` | 账户余额不足 | 充值后重试 |
 | 422 | `validation_error` | 参数校验失败 | 按 `error.message` 调整（如 page_count 与实际不符） |
 | 429 | `rate_limit_error` | 请求频率超限 | **不自动重试**，稍后再试 |

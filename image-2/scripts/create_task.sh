@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Creates a gpt-image-2 task via foxapi.cc and polls until terminal status.
+# Creates a gpt-image-2 task via aihubmax.com and polls until terminal status.
 #
 # Key resolution chain (high -> low):
 #   1. env X_API_KEY
@@ -13,7 +13,7 @@ set -euo pipefail
 # the chain. 401 does not consume credits. Other errors (402/422/429/5xx,
 # network errors) stop the chain immediately.
 
-BASE_URL="${FOXAPI_BASE_URL:-https://api.foxapi.cc}"
+BASE_URL="${AIHUBMAX_BASE_URL:-https://api.aihubmax.com}"
 CREATE_ENDPOINT="/v1/images/generations"
 QUERY_ENDPOINT_PREFIX="/v1/tasks"
 
@@ -72,7 +72,7 @@ Output options:
 Runtime options:
   --poll-interval   Seconds between polls (default 8)
   --max-attempts    Max poll attempts (default 90)
-  --base-url        Override API base URL (default https://api.foxapi.cc)
+  --base-url        Override API base URL (default https://api.aihubmax.com)
   --use-local-key   Also try ~/.config/image-2/.env after env / $PWD .env files
   -h, --help        Show help
 

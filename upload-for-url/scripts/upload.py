@@ -78,12 +78,12 @@ def interpret_upload(resp) -> dict:
     raise UploadError(resp.status, message)
 
 
-BASE_URL = "https://api.foxapi.cc"
+BASE_URL = "https://api.aihubmax.com"
 CONFIG_DIR = os.path.expanduser("~/.config/upload-for-url")
 
 
 def parse_args(argv):
-    p = argparse.ArgumentParser(description="Upload a file to foxapi → 72h public URL")
+    p = argparse.ArgumentParser(description="Upload a file to aihubmax → 72h public URL")
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--file", help="local file path (multipart stream upload)")
     src.add_argument("--base64", dest="base64_data", help="raw base64 or data URL")

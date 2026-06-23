@@ -1,13 +1,13 @@
 ---
 name: multimodal-ask
-description: Use when the user names a specific model and wants it to generate text or understand media — analyze/transcribe/summarize an AUDIO or VIDEO (modalities the agent can't process itself), have a NAMED model describe an image, read a PDF/document, or reason over MIXED media at once. Phrases like "用 gemini-3.5-flash 看这段视频"、"让 claude-opus-4-7 读这个 PDF"、"转写这段音频"、"用 X 模型分析这些图+视频". Drives foxapi.cc llm-custom (async). Do NOT use for IMAGE GENERATION (use image-2 / banana-2), OCR-only, or plain text the agent can answer itself without a named model.
+description: Use when the user names a specific model and wants it to generate text or understand media — analyze/transcribe/summarize an AUDIO or VIDEO (modalities the agent can't process itself), have a NAMED model describe an image, read a PDF/document, or reason over MIXED media at once. Phrases like "用 gemini-3.5-flash 看这段视频"、"让 claude-opus-4-7 读这个 PDF"、"转写这段音频"、"用 X 模型分析这些图+视频". Drives aihubmax.com llm-custom (async). Do NOT use for IMAGE GENERATION (use image-2 / banana-2), OCR-only, or plain text the agent can answer itself without a named model.
 ---
 
 # multimodal-ask
 
 ## Overview
 
-通过 [foxapi.cc](https://docs.foxapi.cc/pages/zh/api-manual/text-series/llm-async/llm-custom) 的统一 `llm-custom` 异步端点（`POST /v1/llm/generations`），用**用户点名的模型**处理文本 / 图片 / 音频 / 视频 / 文档 / 混合媒体，返回模型的**文本**回答。鉴权 `Authorization: Bearer <key>`。
+通过 [aihubmax.com](https://docs.aihubmax.com/pages/zh/api-manual/text-series/llm-async/llm-custom) 的统一 `llm-custom` 异步端点（`POST /v1/llm/generations`），用**用户点名的模型**处理文本 / 图片 / 音频 / 视频 / 文档 / 混合媒体，返回模型的**文本**回答。鉴权 `Authorization: Bearer <key>`。
 
 字段、错误码、轮询契约见 [references/api-guide.md](references/api-guide.md)。
 

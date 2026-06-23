@@ -7,7 +7,7 @@ description: Use when the user asks to generate or edit an image with Nano Banan
 
 ## Overview
 
-通过 [foxapi.cc](https://docs.foxapi.cc/pages/zh/api-manual/image-series/nanobanana/gemini-3.1-flash-image-preview) 的 **Nano Banana 2**（模型 `gemini-3.1-flash-image-preview`）接口创建异步图片生成任务，创建成功后必须继续查询直到任务终态（`completed` 或 `failed`）。鉴权采用 `Authorization: Bearer <key>`。
+通过 [aihubmax.com](https://docs.aihubmax.com/pages/zh/api-manual/image-series/nanobanana/gemini-3.1-flash-image-preview) 的 **Nano Banana 2**（模型 `gemini-3.1-flash-image-preview`）接口创建异步图片生成任务，创建成功后必须继续查询直到任务终态（`completed` 或 `failed`）。鉴权采用 `Authorization: Bearer <key>`。
 
 支持文生图、图生图、图像编辑。尺寸由 **`aspect_ratio`（宽高比）+ `resolution`（画质档，非像素）** 两个字段共同决定。
 
@@ -49,7 +49,7 @@ description: Use when the user asks to generate or edit an image with Nano Banan
 4. `$PWD/.env` 中的 `X_API_KEY=...`（**自动读取**，无需 flag）
 5. `~/.config/banana-2/.env`（仅 `--use-local-key` 时读）
 
-环境变量名 `X_API_KEY` 与 image-2 一致（都是 foxapi.cc 的 key，可共用同一个）；值通过 `Authorization: Bearer <key>` 提交给 foxapi.cc。
+环境变量名 `X_API_KEY` 与 image-2 一致（都是 aihubmax.com 的 key，可共用同一个）；值通过 `Authorization: Bearer <key>` 提交给 aihubmax.com。
 
 **401 自动 fallback**：
 
@@ -208,7 +208,7 @@ X_API_KEY='sk-xxx' ./scripts/create_task.sh \
 - `aspect_ratio` 非法：返回 15 种合法值清单，要求重选
 - `resolution` 非法：返回 5 档合法值（`512`/`0.5K`/`1K`/`2K`/`4K`），要求重选
 - `output_format` 非法：只支持 `jpg`/`png`/`webp`
-- HTTP 401 `authentication_error`：key 无效/过期/权限不足，去 [foxapi.cc](https://foxapi.cc) 检查
+- HTTP 401 `authentication_error`：key 无效/过期/权限不足，去 [aihubmax.com](https://aihubmax.com) 检查
 - HTTP 402 `insufficient_quota`：余额不足，请用户充值后再试
 - HTTP 422 `validation_error`：根据 `error.message` 调整参数
 - HTTP 429 `rate_limit_error`：限流，**禁止自动重试**，告知用户稍后再试

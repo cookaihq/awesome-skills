@@ -14,7 +14,7 @@ from task import (LLMError, PollTimeout, TaskFailed, build_submit_body, extract_
                   poll_task, submit_llm)
 from upload_helper import UploadHelperError, upload_local_file
 
-BASE_URL = "https://api.foxapi.cc"
+BASE_URL = "https://api.aihubmax.com"
 CONFIG_DIR = os.path.expanduser("~/.config/multimodal-ask")
 def _parse_warn_bytes() -> int:
     raw = os.environ.get("MULTIMODAL_ASK_WARN_BYTES") or ""
@@ -30,7 +30,7 @@ WARN_BYTES = _parse_warn_bytes()
 
 
 def parse_args(argv):
-    p = argparse.ArgumentParser(description="Ask a foxapi llm-custom model over text/media")
+    p = argparse.ArgumentParser(description="Ask a aihubmax llm-custom model over text/media")
     p.add_argument("--model", required=True, help="model id (must be in the token's available list)")
     p.add_argument("--prompt", help="text prompt")
     p.add_argument("--system", help="system instruction")

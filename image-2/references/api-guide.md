@@ -1,12 +1,12 @@
-# GPT Image 2 API Guide (foxapi.cc)
+# GPT Image 2 API Guide (aihubmax.com)
 
 Provider docs:
-- Create: https://docs.foxapi.cc/pages/zh/api-manual/image-series/gpt-image-2/gpt-image-2
-- Query: https://docs.foxapi.cc/pages/zh/api-manual/task-management/get-task-detail
+- Create: https://docs.aihubmax.com/pages/zh/api-manual/image-series/gpt-image-2/gpt-image-2
+- Query: https://docs.aihubmax.com/pages/zh/api-manual/task-management/get-task-detail
 
 ## Base URL
 
-- `https://api.foxapi.cc`
+- `https://api.aihubmax.com`
 
 ## Authentication
 
@@ -65,7 +65,7 @@ Constraints:
 ### Request Example
 
 ```bash
-curl -X POST 'https://api.foxapi.cc/v1/images/generations' \
+curl -X POST 'https://api.aihubmax.com/v1/images/generations' \
   -H "Authorization: Bearer $X_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
@@ -106,7 +106,7 @@ Status enum at creation: `pending` / `processing` / `completed` / `failed` (typi
 ### Request Example
 
 ```bash
-curl -X GET "https://api.foxapi.cc/v1/tasks/${TASK_ID}?sync_upstream=true" \
+curl -X GET "https://api.aihubmax.com/v1/tasks/${TASK_ID}?sync_upstream=true" \
   -H "Authorization: Bearer $X_API_KEY"
 ```
 

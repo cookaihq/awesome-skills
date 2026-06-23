@@ -1,6 +1,6 @@
 # pdf2md_docx
 
-通过 foxapi.cc 的 **Doc2X V3** 接口把 PDF 转成 **Markdown / LaTeX / DOCX**（支持公式识别、跨页表格合并）。结果是 ZIP，脚本自动下载并**解压到带日期时间前缀的文件夹**。
+通过 aihubmax.com 的 **Doc2X V3** 接口把 PDF 转成 **Markdown / LaTeX / DOCX**（支持公式识别、跨页表格合并）。结果是 ZIP，脚本自动下载并**解压到带日期时间前缀的文件夹**。
 
 ```bash
 # 本地 PDF → Markdown（自动统计页数 + 上传换 URL + 解压到 {YYYYMMDD-HHMMSS}-{标签}/）
