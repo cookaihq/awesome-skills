@@ -6,8 +6,15 @@ cookaihq 维护的 Agent Skill 集合 —— 每个 skill 是一份遵循 [agent
 
 | Skill | 功能 | 文档 |
 |---|---|---|
-| [image-2](image-2/) | 通过 aihubmax.com 的 `gpt-image-2` 接口生成图片：文生图 / 图生图、11 种预设比例 + 自定义分辨率（最高 4K）、任务完成自动下载到工作区 | [README](image-2/README.md) · [SKILL.md](image-2/SKILL.md) |
-| [banana-2](banana-2/) | 通过 aihubmax.com 的 Nano Banana 2（`gemini-3.1-flash-image-preview`）接口生成/编辑图片：文生图 / 图生图 / 图像编辑、15 种宽高比 + `512`~`4K` 画质档、可选 `google_search` / `image_search`、任务完成自动下载到工作区 | [README](banana-2/README.md) · [SKILL.md](banana-2/SKILL.md) |
+| [image-2](image-2/) | `gpt-image-2` 生成图片：文生图 / 图生图、11 种预设比例 + 自定义分辨率（最高 4K）、任务完成自动下载到工作区 | [README](image-2/README.md) · [SKILL.md](image-2/SKILL.md) |
+| [banana-2](banana-2/) | Nano Banana 2（`gemini-3.1-flash-image-preview`）生成 / 编辑图片：文生图 / 图生图 / 图像编辑、15 种宽高比 + `512`~`4K` 画质档、可选联网搜索 / 图片搜索增强、任务完成自动下载到工作区 | [README](banana-2/README.md) · [SKILL.md](banana-2/SKILL.md) |
+| [multimodal-ask](multimodal-ask/) | 指定模型做多模态理解与文本生成：分析 / 转写音视频、让指定模型读图或读 PDF、对混合媒体一次性推理（异步） | [README](multimodal-ask/README.md) · [SKILL.md](multimodal-ask/SKILL.md) |
+| [pdf2md_docx](pdf2md_docx/) | PDF 转 Markdown / LaTeX / DOCX：公式识别、跨页表格合并，返回 ZIP 自动解压到带时间戳的目录 | [README](pdf2md_docx/README.md) · [SKILL.md](pdf2md_docx/SKILL.md) |
+| [upload-for-url](upload-for-url/) | 把本地文件（图 / 音 / 视频 / 文档）上传成 72 小时有效的公开 URL 供 AI API 消费，也可把远程 URL 转成短链 | [README](upload-for-url/README.md) · [SKILL.md](upload-for-url/SKILL.md) |
+| [preview-share](preview-share/) | 把本地 HTML 页面（或任意本地文件）传到线上预览并拿到可分享 URL，自动识别并一并上传相对路径引用的图片 / CSS / JS | [README](preview-share/README.md) · [SKILL.md](preview-share/SKILL.md) |
+| [template-preview](template-preview/) | 把「一批图片 + 文案」的文件夹渲染成模仿知名 App UI 的展示页（v1 内置小红书个人主页模板），产出自包含的 `index.html` + assets，可交给 preview-share 上传 | [README](template-preview/README.md) · [SKILL.md](template-preview/SKILL.md) |
+| [xhs-downloader](xhs-downloader/) | 从小红书作品链接下载图片 / 视频 / Livephoto 到本地，支持多链接；登录失效时弹二维码登录获取 Cookie | [SKILL.md](xhs-downloader/SKILL.md) |
+| [exit-ip](exit-ip/) | 查询运行本 Agent / Claude Agent SDK 环境的出口（公网）IP 与归属地 / 运营商，直接读取 `ipinfo.io` | [SKILL.md](exit-ip/SKILL.md) |
 
 ## 安装
 
