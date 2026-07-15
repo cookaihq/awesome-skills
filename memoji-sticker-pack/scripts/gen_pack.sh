@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
 # memoji-sticker-pack — 从一张人物照片生成一套 Apple Memoji 风格表情贴纸包。
 #
-# 本脚本是「编排器」：不自己调 API，而是循环调用已安装的 image-2 (gpt-image-2)
-# 技能里的 create_task.sh，复用它的 key 链、轮询、下载、401 兜底。
+# 本脚本是「编排器」：不自己调生成/上传 API，而是循环调用已安装的 image-2
+# (gpt-image-2) 的 create_task.sh（生成，复用它的 key 链、轮询、下载、401 兜底），
+# 并调用已安装的 upload-for-url 的 upload.py（把本地图/URL/base64 上传到 foxapi
+# 文件接口换成 72h 公网 URL，同一把 X_API_KEY）。
+#
+# 参考图统一走「上传取 URL」，不再内联 base64 data URI：所有 image_urls 都是
+# foxapi CDN 链接。这样上游收到的是真实 URL，也不受命令行 ARG_MAX 限制。
 #
 # 流程：
-#   1. 预处理输入照片（缩到 ≤768px → data URI，规避命令行 ARG_MAX）。
+#   1. 预处理输入照片（缩到 ≤768px）→ 上传得 URL。
 #   2. 生成 1 张「基准 Memoji」(base.png)，锁定人物长相与风格。
-#   3. 以基准图为参考，逐个生成各表情（透明底 PNG）。每个失败自动重试一次再跳过。
-#   4. 写 manifest.json + index.html 画廊。
+#   3. base.png（缩到 ≤640px）上传得 URL，作为所有表情的参考（上传 1 次、全套复用）。
+#   4. 以基准图 URL 为参考，逐个生成各表情（透明底 PNG）。每次失败生成默认重试一次。
+#   5. 写 manifest.json + index.html 画廊。
 #
 # 成功判定：create_task.sh 退出码 0 且产物文件确实存在（双重判断）。
 set -uo pipefail
 
-VERSION="1.0.0"
+VERSION="1.1.0"
 
 # ---------------- 默认参数 ----------------
 IMAGE=""
@@ -25,11 +31,15 @@ RESOLUTION="1024x1024"
 EXPRESSIONS_OVERRIDE=""
 USE_LOCAL_KEY=0
 PLAN_ONLY=0
-RETRY=1                # 每个失败的表情重试次数（用户已授权；0 可关闭）
+RETRY=1                # 每次失败生成的重试次数（含基准；用户已授权；0 可关闭）
 BASE_URL_REUSE=""      # --base-url：复用已有基准图 URL（跳过基准生成、省一次积分）
 STAGGER=0.6            # 并行提交每张之间的间隔秒，避免 429 限流
 PER_CALL_POLL=6        # 传给 create_task.sh 的轮询间隔
 PER_CALL_MAXATT=75     # 传给 create_task.sh 的最大轮询次数（6s×75≈450s 单张上限）
+
+# foxapi 网关 base URL：上传接口与生成接口共用同一 host（可用 FOXAPI_BASE_URL 覆盖，
+# 与 create_task.sh 同一约定）。
+FOXAPI_BASE="${FOXAPI_BASE_URL:-https://api.foxapi.cc}"
 
 # 输入预处理尺寸
 PHOTO_MAXPX=768        # 原始照片缩放上限
@@ -67,9 +77,11 @@ gen_pack.sh v${VERSION} — Memoji 表情包生成器（编排 image-2）
 
 用法：
   gen_pack.sh --image <路径|URL|dataURI> [选项]
+  gen_pack.sh --base-url <已有基准图URL> [选项]
 
-必填：
+必填其一：
   --image PATH        人物照片：本地路径 / 公网 URL / data URI
+  --base-url URL      复用已有基准图，跳过基准生成
 
 选项：
   --name NAME         人物名/包名（影响输出目录与标题），默认 memoji
@@ -78,12 +90,12 @@ gen_pack.sh v${VERSION} — Memoji 表情包生成器（编排 image-2）
   --count N           只取前 N 个表情（默认全部）
   --resolution WxH    贴纸分辨率，默认 1024x1024
   --expressions STR   覆盖默认表情，格式 "slug:描述;slug:描述;..."（英文描述）
-  --no-retry          关闭失败重试（默认每个失败表情重试 1 次）
-  --use-local-key     允许 create_task.sh 读取 ~/.config/image-2/.env 里的 key
+  --no-retry          关闭失败重试（默认每次失败生成重试 1 次）
+  --use-local-key     允许 image-2 / upload-for-url 读取各自 ~/.config/<skill>/.env
   --plan              只打印将要做什么 + 预计调用次数，不真正生成（不消耗积分）
   -h, --help          显示帮助
 
-成本：pack = 1(基准) + N(表情) 次 image-2 调用；最坏(每个表情重试一次) = 1 + 2N。
+成本（不复用基准图）：pack 无重试 = 1+N；默认最大 = 2+2N（每次生成最多重试一次）。
 EOF
 }
 
@@ -107,7 +119,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------------- 校验 ----------------
-[[ -z "$IMAGE" ]] && { echo "错误：--image 必填" >&2; usage; exit 1; }
+[[ -z "$IMAGE" && -z "$BASE_URL_REUSE" ]] && {
+  echo "错误：--image 与 --base-url 至少提供一个" >&2
+  usage
+  exit 1
+}
 case "$MODE" in pack|single) ;; *) echo "错误：--mode 只能是 pack 或 single" >&2; exit 1 ;; esac
 [[ "$COUNT" =~ ^[0-9]+$ ]] || { echo "错误：--count 必须是非负整数" >&2; exit 1; }
 
@@ -138,6 +154,23 @@ fi
 
 EXPR_N=${#EXPR_LIST[@]}
 
+# ---------------- 调用账本 ----------------
+# 基准图复用时不生成基准；pack 仍需生成 N 个表情并上传基准图一次。
+BASE_CALLS=1
+[[ -n "$BASE_URL_REUSE" ]] && BASE_CALLS=0
+EXPR_CALLS=0
+[[ "$MODE" == "pack" ]] && EXPR_CALLS=$EXPR_N
+TOTAL_CALLS=$((BASE_CALLS + EXPR_CALLS))
+MAX_CALLS=$TOTAL_CALLS
+[[ $RETRY -gt 0 ]] && MAX_CALLS=$((2 * TOTAL_CALLS))
+
+UPLOAD_CALLS=$BASE_CALLS
+[[ "$MODE" == "pack" ]] && UPLOAD_CALLS=$((UPLOAD_CALLS + 1))
+NEEDS_IMAGE2=0
+NEEDS_UPLOADER=0
+[[ $TOTAL_CALLS -gt 0 ]] && NEEDS_IMAGE2=1
+[[ $UPLOAD_CALLS -gt 0 ]] && NEEDS_UPLOADER=1
+
 # ---------------- 定位 image-2 的 create_task.sh ----------------
 find_image2() {
   local c
@@ -147,38 +180,63 @@ find_image2() {
   return 1
 }
 
+# ---------------- 定位 upload-for-url 的 upload.py ----------------
+find_uploader() {
+  local c
+  for c in "$HOME"/.claude/skills/upload-for-url*/scripts/upload.py; do
+    [[ -f "$c" ]] && { printf '%s' "$c"; return 0; }
+  done
+  return 1
+}
+
 # ---------------- 计划模式（不消耗积分） ----------------
 if [[ $PLAN_ONLY -eq 1 ]]; then
-  if [[ "$MODE" == "single" ]]; then
-    total=1; worst=1
-  else
-    total=$((1 + EXPR_N)); worst=$((1 + 2*EXPR_N))
-  fi
   echo "PLAN（不消耗积分）："
   echo "- 模式: $MODE"
   echo "- 人物/包名: $NAME"
   echo "- 输出目录: $OUTDIR"
   echo "- 分辨率: $RESOLUTION"
-  echo "- 基准 Memoji 调用: 1 次"
+  echo "- 基准 Memoji 生成调用: $BASE_CALLS 次"
+  [[ -n "$BASE_URL_REUSE" ]] && echo "- 基准图来源: 复用 $BASE_URL_REUSE"
   if [[ "$MODE" == "pack" ]]; then
     echo "- 表情数: $EXPR_N"
     printf '    '; for e in "${EXPR_LIST[@]}"; do lbl="${e#*|}"; printf '%s ' "${lbl%%|*}"; done; echo
   fi
-  echo "- image-2 调用总数（无重试）: $total 次"
-  [[ "$MODE" == "pack" ]] && echo "- 最坏情况（每个表情各重试 1 次）: $worst 次"
-  if CREATE_SH="$(find_image2)"; then
-    echo "- 复用脚本: $CREATE_SH"
+  echo "- image-2 生成调用总数（无重试）: $TOTAL_CALLS 次"
+  [[ $RETRY -gt 0 ]] && echo "- 最大生成调用数（每次失败生成最多重试 1 次）: $MAX_CALLS 次"
+  echo "- 文件上传调用: $UPLOAD_CALLS 次（转存到 foxapi 文件接口；非生成调用）"
+  if [[ $NEEDS_IMAGE2 -eq 0 ]]; then
+    echo "- image-2: 本次不需要"
+  elif CREATE_SH="$(find_image2)"; then
+    echo "- 复用生成脚本: $CREATE_SH"
   else
     echo "- ⚠️ 未找到 image-2 的 create_task.sh（请确认 image-2 技能已安装）"
   fi
+  if [[ $NEEDS_UPLOADER -eq 0 ]]; then
+    echo "- upload-for-url: 本次不需要"
+  elif UPLOAD_PY="$(find_uploader)"; then
+    echo "- 复用上传脚本: $UPLOAD_PY"
+  else
+    echo "- ⚠️ 未找到 upload-for-url 的 upload.py（请确认 upload-for-url 技能已安装）"
+  fi
+  echo "- 上传目标 host: $FOXAPI_BASE"
   echo "- ⚠️ 实际运行会消耗 foxapi 积分。"
   exit 0
 fi
 
-# 真正运行：先确认 image-2 存在
-if ! CREATE_SH="$(find_image2)"; then
+# 真正运行：只在本次确实需要生成时确认 image-2 存在
+CREATE_SH=""
+if [[ $NEEDS_IMAGE2 -eq 1 ]] && ! CREATE_SH="$(find_image2)"; then
   echo "错误：未找到 image-2 的 create_task.sh。" >&2
   echo "本技能依赖 image-2 (gpt-image-2) 技能，请先安装它。" >&2
+  exit 1
+fi
+
+# 只在本次确实有上传时确认 upload-for-url 存在
+UPLOAD_PY=""
+if [[ $NEEDS_UPLOADER -eq 1 ]] && ! UPLOAD_PY="$(find_uploader)"; then
+  echo "错误：未找到 upload-for-url 的 upload.py。" >&2
+  echo "本技能把参考图上传到 foxapi 换 URL，依赖 upload-for-url 技能，请先安装它。" >&2
   exit 1
 fi
 
@@ -186,10 +244,11 @@ mkdir -p "$OUTDIR"
 
 # ---------------- 工具函数 ----------------
 
-# 把本地图缩放并编码成 data URI。 $1=文件 $2=最大边 $3=jpg|png
-to_data_uri() {
+# 把本地图缩放到临时文件，echo 临时文件路径。 $1=文件 $2=最大边 $3=jpg|png
+# 缩放失败则 echo 原图路径兜底。调用方用完后删返回路径（若等于原图路径则别删）。
+downscale_to_tmp() {
   local src="$1" maxpx="$2" fmt="$3"
-  local tmp out mime
+  local tmp out
   tmp="$(mktemp -t memoji.XXXXXX)"
   out="${tmp}.${fmt}"
   if command -v sips >/dev/null 2>&1; then
@@ -203,22 +262,37 @@ to_data_uri() {
   else
     cp "$src" "$out"
   fi
-  [[ -f "$out" ]] || out="$src"   # 缩放失败则用原图兜底
-  mime="image/jpeg"; [[ "$fmt" == "png" ]] && mime="image/png"
-  printf 'data:%s;base64,%s' "$mime" "$(base64 < "$out" | tr -d '\n')"
-  rm -f "$tmp" "$out" 2>/dev/null || true
+  rm -f "$tmp" 2>/dev/null || true
+  if [[ -f "$out" ]]; then printf '%s' "$out"; else printf '%s' "$src"; fi
 }
 
-# 把 --image 解析成可传给 --image-url 的值。 $1=输入 $2=最大边 $3=fmt
-resolve_image() {
+# 把 --image（本地路径 / 公网 URL / data URI）统一上传到 foxapi 文件接口换 URL，
+# echo 得到的公网 URL（stdout 只输出 URL，供命令替换捕获；诊断进 .log-upload.txt）。
+# 一律转存：连公网 URL 也重新托管，使所有 image_urls 都是 foxapi CDN 链接。
+# 上传失败返回非 0，绝不回退内联 base64。 $1=输入 $2=最大边（本地文件缩图用）$3=fmt
+upload_image() {
   local in="$1" maxpx="$2" fmt="$3"
+  local ulog="$OUTDIR/.log-upload.txt"
+  local url rc tmp="" src_flag src_val
   case "$in" in
-    http://*|https://*|data:*) printf '%s' "$in" ;;
+    http://*|https://*) src_flag="--url";    src_val="$in" ;;
+    data:*)             src_flag="--base64"; src_val="$in" ;;
     *)
       [[ -f "$in" ]] || { echo "错误：找不到图片文件: $in" >&2; return 1; }
-      to_data_uri "$in" "$maxpx" "$fmt"
+      tmp="$(downscale_to_tmp "$in" "$maxpx" "$fmt")"
+      src_flag="--file"; src_val="$tmp"
       ;;
   esac
+  local args=("$src_flag" "$src_val" --base-url "$FOXAPI_BASE")
+  [[ $USE_LOCAL_KEY -eq 1 ]] && args+=(--use-local-key)
+  url="$(python3 "$UPLOAD_PY" "${args[@]}" 2>>"$ulog")"
+  rc=$?
+  [[ -n "$tmp" && "$tmp" != "$in" ]] && rm -f "$tmp" 2>/dev/null || true
+  if [[ $rc -ne 0 || -z "$url" ]]; then
+    echo "错误：上传图片失败（日志见 $ulog）：$in" >&2
+    return 1
+  fi
+  printf '%s' "$url"
 }
 
 # 查找某个 stem 实际生成的产物文件
@@ -286,9 +360,11 @@ cutout_file() {
 
 # ---------------- 第 1 步：基准 Memoji ----------------
 echo "=== Memoji 表情包：${NAME} ==="
-echo "[1/$([[ "$MODE" == single ]] && echo 1 || echo $((1+EXPR_N)))] 预处理照片 + 生成基准 Memoji…"
-
-INPUT_REF="$(resolve_image "$IMAGE" "$PHOTO_MAXPX" jpg)" || exit 1
+if [[ -n "$BASE_URL_REUSE" ]]; then
+  echo "[基准] 下载并复用已有基准图…"
+else
+  echo "[1/$([[ "$MODE" == single ]] && echo 1 || echo $((1+EXPR_N)))] 上传照片 + 生成基准 Memoji…"
+fi
 
 BASE_PROMPT="Turn the person in the reference photo into a friendly Memoji-style avatar. Preserve their key identifying traits: hairstyle, hair color, skin tone, facial hair, glasses or accessories, and overall vibe. Neutral friendly expression. ${STYLE_FRAGMENT}"
 
@@ -299,6 +375,11 @@ if [[ -n "$BASE_URL_REUSE" ]]; then
   fi
   PRODUCED="$OUTDIR/base_raw"
 else
+  echo "    上传输入照片换 URL…"
+  INPUT_REF="$(upload_image "$IMAGE" "$PHOTO_MAXPX" jpg)" || {
+    echo "错误：输入照片上传失败，无法生成基准 Memoji。日志：$OUTDIR/.log-upload.txt" >&2
+    exit 2
+  }
   if ! generate "$INPUT_REF" "$BASE_PROMPT" "base"; then
     echo "错误：基准 Memoji 生成失败，无法继续。日志：$OUTDIR/.log-base.txt" >&2
     exit 2
@@ -320,7 +401,12 @@ fi
 # ---------------- 第 2 步：逐个表情（并行提交） ----------------
 # 用基准图（缩小版）作为所有表情的参考，保证同一张脸。
 # 单张 gpt-image-2 图生图很慢（分钟级），故并发提交、墙钟≈单张耗时。
-BASE_REF="$(to_data_uri "$BASE_FILE" "$REF_MAXPX" png)"
+# 基准图上传一次得 URL，全套表情复用同一 URL（不再每张内联 base64）。
+echo "[上传] 基准图 → foxapi URL（供所有表情复用）…"
+BASE_REF="$(upload_image "$BASE_FILE" "$REF_MAXPX" png)" || {
+  echo "错误：基准图上传失败，无法生成表情。日志：$OUTDIR/.log-upload.txt" >&2
+  exit 2
+}
 
 # 组装每个表情的 stem / prompt / label / slug（按索引对齐）
 STEMS=(); PROMPTS=(); LABELS=(); SLUGS=()
@@ -409,7 +495,11 @@ if [[ ${#FAIL_ROWS[@]} -gt 0 ]]; then
     echo "  - ${label} (${slug})"
   done
   echo "可针对单个表情单独重跑，例如："
-  echo "  bash $0 --image '$IMAGE' --name '$NAME' --outdir '$OUTDIR' --expressions '<slug>:<描述>'"
+  if [[ -n "$BASE_URL_REUSE" ]]; then
+    echo "  bash $0 --base-url '$BASE_URL_REUSE' --name '$NAME' --outdir '$OUTDIR' --expressions '<slug>:<描述>'"
+  else
+    echo "  bash $0 --image '$IMAGE' --name '$NAME' --outdir '$OUTDIR' --expressions '<slug>:<描述>'"
+  fi
 fi
 echo "画廊：$OUTDIR/index.html"
 exit 0

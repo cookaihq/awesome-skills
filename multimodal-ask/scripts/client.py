@@ -7,6 +7,15 @@ from collections import namedtuple
 
 DEFAULT_BOUNDARY = "----foxapiUploadBoundaryXyZ"
 
+# api.foxapi.cc sits behind Cloudflare, which rejects urllib's default
+# "Python-urllib/x.y" User-Agent with HTTP 403 / "error code: 1010" (banned
+# browser signature) — observed on the file-upload routes. Sending a browser-like
+# UA clears that gate. Callers may override by passing their own User-Agent header.
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
 Resp = namedtuple("Resp", "status json text")
 
 
@@ -37,6 +46,8 @@ def http_request(method: str, url: str, headers: dict,
     """Perform an HTTP request. Returns Resp(status, json, text) for any HTTP
     status (including 4xx/5xx). Raises urllib.error.URLError only on network
     failure (caller treats that as fatal, not a key-fallback trigger)."""
+    if not any(h.lower() == "user-agent" for h in headers):
+        headers = {**headers, "User-Agent": DEFAULT_USER_AGENT}
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:

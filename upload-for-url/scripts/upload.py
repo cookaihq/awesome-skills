@@ -68,7 +68,10 @@ def run_upload(full_url, headers, body, keys, transport=None) -> tuple:
 def interpret_upload(resp) -> dict:
     if resp.status == 200 and isinstance(resp.json, dict) and resp.json.get("url"):
         return resp.json
-    hint = ERROR_HINTS.get(resp.status, "未预期的响应")
+    if resp.status == 403 and "error code: 1010" in (resp.text or "").lower():
+        hint = "请求被 Cloudflare 拒绝（error code: 1010，请检查 User-Agent）"
+    else:
+        hint = ERROR_HINTS.get(resp.status, "未预期的响应")
     server_msg = ""
     if isinstance(resp.json, dict) and isinstance(resp.json.get("error"), dict):
         server_msg = resp.json["error"].get("message", "")
@@ -78,12 +81,12 @@ def interpret_upload(resp) -> dict:
     raise UploadError(resp.status, message)
 
 
-BASE_URL = "https://api.aihubmax.com"
+BASE_URL = "https://api.foxapi.cc"
 CONFIG_DIR = os.path.expanduser("~/.config/upload-for-url")
 
 
 def parse_args(argv):
-    p = argparse.ArgumentParser(description="Upload a file to aihubmax → 72h public URL")
+    p = argparse.ArgumentParser(description="Upload a file to foxapi → 72h public URL")
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--file", help="local file path (multipart stream upload)")
     src.add_argument("--base64", dest="base64_data", help="raw base64 or data URL")

@@ -2,7 +2,7 @@
 
 从**一张人物照片**生成一套 **Apple Memoji 风格（拟我表情）** 的表情贴纸包：先把照片转成一张「基准 Memoji」头像锁定长相，再以它为参考并发生成多个表情（默认 16 个），输出**透明底 PNG** + 可浏览的 `index.html` 画廊。
 
-这是一个**编排型 skill**——自己不调图像 API，而是循环调用同仓库的 [`image-2`](../image-2/)（`gpt-image-2`）的 `create_task.sh`，复用它的 key 链、轮询、下载、401 兜底。
+这是一个**编排型 skill**——自己不调生成/上传 API，而是编排同仓两个兄弟技能：用 [`image-2`](../image-2/)（`gpt-image-2`）的 `create_task.sh` 生成图（复用它的 key 链、轮询、下载、401 兜底），用 [`upload-for-url`](../upload-for-url/) 的 `upload.py` 把参考图上传到 foxapi 换成公网 URL。**参考图统一走「上传取 URL」，不再内联 base64**——传给生成接口的 `image_urls` 全是 foxapi CDN 链接。
 
 ## 效果
 
@@ -14,16 +14,18 @@
 
 ## 工作原理
 
-1. **预处理**：本地照片用 `sips`（缺失回退 `ffmpeg`）缩到 ≤768px → data URI（规避命令行 ARG_MAX）。
+1. **预处理 + 上传**：本地照片用 `sips`（缺失回退 `ffmpeg`）缩到 ≤768px，再经 `upload-for-url` 上传到 foxapi 换成公网 URL（不再内联 base64）。
 2. **基准 Memoji**：`gpt-image-2` 图生图 → `base.png`，锁定人物长相与风格。
-3. **逐表情（并发）**：以基准图为参考、只改表情/动作，**并发提交** N 张（墙钟≈单张耗时，而非 N×）。每张失败自动重试一次再跳过。
-4. **抠图**：`gpt-image-2` 渠道不支持透明背景（见下方「实现说明」），故让模型出**纯绿幕底**，再用 `cutout.py`（PIL + numpy）按到角落色的距离键控成真透明，并去绿边。
-5. **画廊**：`build_gallery.py` 生成 `manifest.json` + `index.html`（棋盘格背景显示透明区域）。
+3. **基准图上传**：`base.png` 缩到 ≤640px 上传换 URL（上传 1 次，全套表情复用该 URL）。
+4. **逐表情（并发）**：以基准图 URL 为参考、只改表情/动作，**并发提交** N 张（墙钟≈单张耗时，而非 N×）。每张失败自动重试一次再跳过。
+5. **抠图**：`gpt-image-2` 渠道不支持透明背景（见下方「实现说明」），故让模型出**纯绿幕底**，再用 `cutout.py`（PIL + numpy）按到角落色的距离键控成真透明，并去绿边。
+6. **画廊**：`build_gallery.py` 生成 `manifest.json` + `index.html`（棋盘格背景显示透明区域）。
 
 ## 依赖
 
-- 同平台已安装 [`image-2`](../image-2/) skill（脚本按 `~/.claude/skills/image-2*/scripts/create_task.sh` 定位）。
-- foxapi.cc 的 key（与 image-2 共用 `X_API_KEY`）。
+- 需要生成图片时，安装 [`image-2`](../image-2/) skill（脚本按 `~/.claude/skills/image-2*/scripts/create_task.sh` 定位）。
+- 需要上传输入图或基准图时，安装 [`upload-for-url`](../upload-for-url/) skill（脚本按 `~/.claude/skills/upload-for-url*/scripts/upload.py` 定位）。只有 `--base-url ... --mode single` 完全不需要这两个兄弟 Skill。
+- foxapi.cc 的 key（生成与上传共用 `X_API_KEY`；`--use-local-key` 时两技能各读自己的 `~/.config/<skill>/.env`，最省事是放进程 env 或 `$PWD/.env`）。
 - Python3 + `Pillow` + `numpy`（用于抠图）；macOS `sips`（或 `ffmpeg`）用于缩图。
 
 ## 用法
@@ -47,7 +49,7 @@ bash scripts/gen_pack.sh --image "./me.jpg" \
 
 | 参数 | 说明 |
 |---|---|
-| `--image PATH` | 必填。本地路径 / 公网 URL / data URI |
+| `--image PATH` | 与 `--base-url` 二选一。本地路径 / 公网 URL / data URI |
 | `--name NAME` | 人物名/包名，影响输出目录 `./memoji-<name>/` 与画廊标题 |
 | `--outdir DIR` | 自定义输出目录 |
 | `--mode pack\|single` | `pack`=整套(默认)，`single`=只出基准头像 |
@@ -55,13 +57,15 @@ bash scripts/gen_pack.sh --image "./me.jpg" \
 | `--expressions "slug:描述;..."` | 覆盖默认表情 |
 | `--resolution WxH` | 贴纸分辨率，默认 `1024x1024` |
 | `--no-retry` | 关闭失败重试 |
-| `--base-url URL` | 复用已有基准图 URL（跳过基准生成、省一次积分、可断点续跑） |
+| `--base-url URL` | 与 `--image` 二选一。复用已有基准图 URL（跳过基准生成、可断点续跑） |
 | `--use-local-key` | 允许读 `~/.config/image-2/.env` 里的 key |
 | `--plan` | 只打印计划与调用次数，不生成、不消耗积分 |
 
 ## 成本
 
-一套 pack = **1（基准）+ N（表情）** 次 `gpt-image-2` 调用（默认 17 次）；开启失败重试时最坏 `1 + 2N`。`single` 模式 1 次。运行前请务必用 `--plan` 预览并向用户确认——**会消耗 foxapi 积分**。
+不复用基准图时，一套 pack 无重试 = **1（基准）+ N（表情）** 次 `gpt-image-2` 调用（默认 17 次）；默认每次失败生成最多重试一次，因此最大 `2 + 2N`。`single` 无重试 1 次、最大 2 次。另有**文件上传调用**（转存参考图，非生成调用）：pack 2 次、single 1 次。
+
+使用 `--base-url` 复用基准图时，pack 无重试 = N 次生成、最大 2N 次、上传 1 次；single 不生成也不上传。运行前请务必用 `--plan` 获取本次准确计数并向用户确认——**会消耗 foxapi 积分**。
 
 ## 输出结构
 

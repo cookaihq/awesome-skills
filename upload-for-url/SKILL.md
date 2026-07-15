@@ -1,20 +1,20 @@
 ---
 name: upload-for-url
-description: Use when the user wants to turn a LOCAL file (image/audio/video/document) into a public URL that an AI API can consume — phrases like "把这个文件传上去拿个链接"、"上传文件换个 URL"、"这个视频/音频/PDF 传成在线地址给模型用". Also re-hosts a remote URL into a aihubmax 72h short link. Returns a public URL valid for 72 hours. Do NOT use for HTML page preview (that's preview-share), production deploys, npm publish, or git push.
+description: Use when the user wants to turn a LOCAL file (image/audio/video/document) into a public URL that an AI API can consume — phrases like "把这个文件传上去拿个链接"、"上传文件换个 URL"、"这个视频/音频/PDF 传成在线地址给模型用". Also re-hosts a remote URL into a foxapi 72h short link. Returns a public URL valid for 72 hours. Do NOT use for HTML page preview (that's preview-share), production deploys, npm publish, or git push.
 ---
 
 # upload-for-url
 
 ## Overview
 
-通过 [aihubmax.com](https://docs.aihubmax.com/pages/zh/api-manual/file-management/upload-stream) 的文件上传接口，把本地文件 / 远程 URL / base64 托管成一个**公网可访问的 URL**，常用于喂给只接受 URL 的 AI 接口（如 multimodal-ask 的 `image_url`/`video_url`/`audio_url`/`file_url`）。鉴权 `Authorization: Bearer <key>`。
+通过 [foxapi.cc](https://docs.foxapi.cc/pages/zh/api-manual/file-management/upload-stream) 的文件上传接口，把本地文件 / 远程 URL / base64 托管成一个**公网可访问的 URL**，常用于喂给只接受 URL 的 AI 接口（如 multimodal-ask 的 `image_url`/`video_url`/`audio_url`/`file_url`）。默认网关为 `https://api.foxapi.cc`，鉴权 `Authorization: Bearer <key>`。
 
 完整字段、错误码见 [references/api-guide.md](references/api-guide.md)。
 
 ## When to Use
 
 - 把**本地文件**（图/音/视频/文档）变成公网 URL，喂给只收 URL 的 API
-- 把一个远程 URL **转存**成 aihubmax 72h 短链
+- 把一个远程 URL **转存**成 foxapi 72h 短链
 
 ## When NOT to Use
 
@@ -26,6 +26,7 @@ description: Use when the user wants to turn a LOCAL file (image/audio/video/doc
 - **上传的 URL 72 小时后过期**——输出时必须告知用户；需长期保留要转存
 - 不得回显完整 `Authorization` token，日志只允许 `head4****tail4` 掩码
 - HTTP 401 触发 key 链 fallback（401 不消耗积分，安全）；其他错误码不 fallback，直接返回交用户决定
+- 上传请求默认发送浏览器 User-Agent，避免 Cloudflare `403 / error code: 1010`；调用方显式传入的 User-Agent 保持不变
 - **不预设文件大小上限**：文档未给出具体字节数，413 `file_too_large_error` 由 API 反应式裁决，禁止硬编码 MB 数值
 
 ## Auth & Key Handling
@@ -60,7 +61,7 @@ X_API_KEY='sk-xxx' python3 scripts/upload.py --file ./a.png --file-name cover.pn
 | 1 | 上传失败（HTTP 4xx/5xx、网络错误，或本地文件不可读），stderr 有原因 |
 | 2 | 未找到 X_API_KEY（或命令行参数错误，argparse 用法退出码也是 2） |
 
-HTTP 语义：401 鉴权失败（触发 key fallback）｜403 存储空间不足｜413 文件过大（不编造上限）｜429 限流（不自动重试）｜5xx 服务异常。
+HTTP 语义：401 鉴权失败（触发 key fallback）｜403 存储空间不足；纯文本 `error code: 1010` 表示 Cloudflare 拒绝 User-Agent｜413 文件过大（不编造上限）｜429 限流（不自动重试）｜5xx 服务异常。
 
 ## Pre-Response Checklist
 
